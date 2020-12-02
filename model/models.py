@@ -145,6 +145,7 @@ class PIFuNeRFNet(torch.nn.Module):
         :param xyz (SB, B, 3) or (B, 3);
         SB is batch of objects
         B is batch of points (in rays)
+        NS is number of input views
         :return (SB, B, 4) r g b sigma
         """
         #  with profiler.profile(record_shapes=True) as prof:
@@ -158,9 +159,8 @@ class PIFuNeRFNet(torch.nn.Module):
             SB, B, _ = xyz.shape
             NS = self.num_views_per_obj
 
+            # Transform query points into the camera spaces of the input views
             xyz = repeat_interleave(xyz, NS, dim=0)  # (SB*NS, B, 3)
-
-            # (SB, B, 3)
             xyz_rot = torch.matmul(self.poses[:, None, :3, :3], xyz.unsqueeze(-1))[..., 0]
             xyz = xyz_rot + self.poses[:, None, :3, 3]
 
