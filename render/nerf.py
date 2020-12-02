@@ -7,7 +7,6 @@ https://github.com/kwea123/nerf_pl
 import torch
 import torch.nn.functional as F
 import util
-import ipdb
 import torch.autograd.profiler as profiler
 from dotmap import DotMap
 

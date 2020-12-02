@@ -1,0 +1,11 @@
+torch
+torchvision
+pretrainedmodels
+pyhocon
+imageio
+opencv-python
+imageio-ffmpeg
+tensorboard
+dotmap
+scipy
+scikit-image
