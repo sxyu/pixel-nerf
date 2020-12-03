@@ -14,9 +14,7 @@ from util import get_image_to_tensor_balanced, get_mask_to_tensor
 class MultiObjectDataset(torch.utils.data.Dataset):
     """Synthetic dataset of scenes with multiple Shapenet objects"""
 
-    def __init__(
-        self, path, z_near=4, z_far=9, n_views=None
-    ):
+    def __init__(self, path, z_near=4, z_far=9, n_views=None):
         super().__init__()
         self.base_path = path
         print("Loading NeRF synthetic dataset", self.base_path)
@@ -88,7 +86,9 @@ class MultiObjectDataset(torch.utils.data.Dataset):
             bbox = torch.tensor([cmin, rmin, cmax, rmax], dtype=torch.float32)
 
             img_tensor = self.image_to_tensor(img[..., :3])
-            img = img_tensor * mask + (1.0 - mask) # solid white background where transparent
+            img = img_tensor * mask + (
+                1.0 - mask
+            )  # solid white background where transparent
             all_imgs.append(img)
             all_bboxes.append(bbox)
             all_masks.append(mask)
@@ -112,4 +112,3 @@ class MultiObjectDataset(torch.utils.data.Dataset):
             "poses": poses,
         }
         return result
-

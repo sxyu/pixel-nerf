@@ -8,20 +8,19 @@ from .model_util import make_encoder, make_mlp
 import torch.autograd.profiler as profiler
 from util import repeat_interleave
 import os
+import warnings
 
 
-class PIFuNeRFNet(torch.nn.Module):
+class PixelNeRFNet(torch.nn.Module):
     def __init__(self, conf, stop_encoder_grad=False):
         """
         :param conf PyHocon config subtree 'model'
         """
         super().__init__()
-        print("Using PIFuNeRF model")
-
         self.encoder = make_encoder(conf["encoder"])
         self.use_encoder = conf.get_bool("use_encoder", True)  # Image features?
 
-        self.use_xyz = conf.get_bool("use_xyz", False) 
+        self.use_xyz = conf.get_bool("use_xyz", False)
 
         assert self.use_encoder or self.use_xyz  # Must use some feature..
 
@@ -42,9 +41,10 @@ class PIFuNeRFNet(torch.nn.Module):
         # Enable view directions
         self.use_viewdirs = conf.get_bool("use_viewdirs", False)
 
+        # Global image features?
         self.use_global_encoder = conf.get_bool(
             "use_global_encoder", False
-        )  # Global image features?
+        )
 
         d_latent = self.encoder.latent_size if self.use_encoder else 0
         d_in = 3 if self.use_xyz else 1
@@ -76,7 +76,7 @@ class PIFuNeRFNet(torch.nn.Module):
         self.mlp_far = make_mlp(
             conf["mlp_far"], d_in, d_latent, d_out=d_out, allow_empty=True
         )
-        # Note: this is now world -> camera, and bottom row is omitted
+        # Note: this is world -> camera, and bottom row is omitted
         self.register_buffer("poses", torch.empty(1, 3, 4), persistent=False)
         self.register_buffer("image_shape", torch.empty(2), persistent=False)
 
@@ -86,25 +86,24 @@ class PIFuNeRFNet(torch.nn.Module):
         self.register_buffer("focal", torch.empty(1, 2), persistent=False)
         # Principal point
         self.register_buffer("c", torch.empty(1, 2), persistent=False)
-        self.z_bounds = (None, None)
 
         self.num_objs = 0
         self.num_views_per_obj = 1
 
-    def encode(self, images, poses, focal, z_bounds=(2.5, 6.5), c=None):
+    def encode(self, images, poses, focal, z_bounds=None, c=None):
         """
-        :param images (B, 3, H, W)
-        :param poses (B, 4, 4)
-        :param focal focal length (B) or (B, 2) [fx, fy]
-        :param z_bounds tuple (z_near, z_far) camera distance to center, float.
-        Only actually needed if voxel encoder is used.
-        :param c principal point None or (B, 2) [cx, cy],
+        :param images (NS, 3, H, W)
+        NS is number of input (aka source or reference) views
+        :param poses (NS, 4, 4)
+        :param focal focal length () or (2) or (NS) or (NS, 2) [fx, fy]
+        :param z_bounds ignored argument (used in the past)
+        :param c principal point None or () or (2) or (NS) or (NS, 2) [cx, cy],
         default is center of image
         """
         self.num_objs = images.size(0)
         if len(images.shape) == 5:
             assert len(poses.shape) == 4
-            assert poses.size(1) == images.size(1)  # Be consistent with NS
+            assert poses.size(1) == images.size(1)  # Be consistent with NS = num input views
             self.num_views_per_obj = images.size(1)
             images = images.reshape(-1, *images.shape[2:])
             poses = poses.reshape(-1, 4, 4)
@@ -116,22 +115,29 @@ class PIFuNeRFNet(torch.nn.Module):
         trans = -torch.bmm(rot, poses[:, :3, 3:])  # (B, 3, 1)
         self.poses = torch.cat((rot, trans), dim=-1)  # (B, 3, 4)
 
-        self.z_bounds = z_bounds
         self.image_shape[0] = images.shape[-1]
         self.image_shape[1] = images.shape[-2]
 
+        # Handle various focal length/principal point formats
         if len(focal.shape) == 0:
+            # Scalar: fx = fy = value for all views
             focal = focal[None, None].repeat((1, 2))
         elif len(focal.shape) == 1:
+            # Vector f: fx = fy = f_i *for view i*
+            # Length should match NS (or 1 for broadcast)
             focal = focal.unsqueeze(-1).repeat((1, 2))
+        # Otherwise, can specify as 
         focal[..., 1] *= -1.0
         self.focal = focal.float()
 
         if c is None:
+            # Default principal point is center of image
             c = (self.image_shape * 0.5).unsqueeze(0)
         elif len(c.shape) == 0:
+            # Scalar: cx = cy = value for all views
             c = c[None, None].repeat((1, 2))
         elif len(c.shape) == 1:
+            # Vector c: cx = cy = c_i *for view i*
             c = c.unsqueeze(-1).repeat((1, 2))
         self.c = c
 
@@ -161,7 +167,9 @@ class PIFuNeRFNet(torch.nn.Module):
 
             # Transform query points into the camera spaces of the input views
             xyz = repeat_interleave(xyz, NS, dim=0)  # (SB*NS, B, 3)
-            xyz_rot = torch.matmul(self.poses[:, None, :3, :3], xyz.unsqueeze(-1))[..., 0]
+            xyz_rot = torch.matmul(self.poses[:, None, :3, :3], xyz.unsqueeze(-1))[
+                ..., 0
+            ]
             xyz = xyz_rot + self.poses[:, None, :3, 3]
 
             if self.d_in > 0:
@@ -191,7 +199,9 @@ class PIFuNeRFNet(torch.nn.Module):
                         self.poses[:, None, :3, :3], viewdirs
                     )  # (SB*NS, B, 3, 1)
                     viewdirs = viewdirs.reshape(-1, 3)  # (SB*B, 3)
-                    z_feature = torch.cat((z_feature, viewdirs), dim=1)  # (SB*B, 4 or 6)
+                    z_feature = torch.cat(
+                        (z_feature, viewdirs), dim=1
+                    )  # (SB*B, 4 or 6)
 
                 if self.use_code and self.use_code_viewdirs:
                     # Positional encoding (with viewdirs)
@@ -232,8 +242,11 @@ class PIFuNeRFNet(torch.nn.Module):
                 global_latent = repeat_interleave(global_latent, num_repeats, 0)
                 mlp_input = torch.cat((global_latent, mlp_input), dim=-1)
 
+            # Camera frustum culling stuff, currently disabled
             combine_index = None
             dim_size = None
+
+            # Run main NeRF network
             if coarse or self.mlp_fine is None:
                 mlp_output = self.mlp_coarse(
                     mlp_input,
@@ -249,6 +262,7 @@ class PIFuNeRFNet(torch.nn.Module):
                     dim_size=dim_size,
                 )
 
+            # Interpret the output
             mlp_output = mlp_output.reshape(-1, B, self.d_out)
 
             rgb = mlp_output[..., :3]
@@ -265,14 +279,16 @@ class PIFuNeRFNet(torch.nn.Module):
 
     def load_weights(self, args, opt_init=False, strict=True, device=None):
         """
-        Helper for loading weights according to argparse arguments
+        Helper for loading weights according to argparse arguments.
+        Your can put a checkpoint at checkpoints/<exp>/pixel_nerf_init to use as initialization.
+        :param opt_init if true, loads from init checkpoint instead of usual even when resuming
         """
         if opt_init and not args.resume:
             return
         ckpt_name = (
-            "pifu_nerf_init_latest"
+            "pixel_nerf_init"
             if opt_init or not args.resume
-            else "pifu_nerf_latest"
+            else "pixel_nerf_latest"
         )
         model_path = "%s/%s/%s" % (args.checkpoints_path, args.name, ckpt_name)
 
@@ -285,13 +301,14 @@ class PIFuNeRFNet(torch.nn.Module):
                 torch.load(model_path, map_location=device), strict=strict
             )
         elif not opt_init:
-            print("WARNING:", model_path, "does not exist, not loaded")
+            warnings.warn("WARNING: {} does not exist, not loaded".format(model_path))
 
     def save_weights(self, args, opt_init=False):
         """
         Helper for saving weights according to argparse arguments
+        :param opt_init if true, saves from init checkpoint instead of usual
         """
-        ckpt_name = "pifu_nerf_init_latest" if opt_init else "pifu_nerf_latest"
+        ckpt_name = "pixel_nerf_init" if opt_init else "pixel_nerf_latest"
         torch.save(
             self.state_dict(),
             "%s/%s/%s" % (args.checkpoints_path, args.name, ckpt_name),

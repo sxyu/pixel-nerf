@@ -24,7 +24,6 @@ class NeRFRenderer(torch.nn.Module):
         white_bkgd=False,
         lindisp=False,
         sched=None,  # ray sampling schedule for coarse and fine rays
-        fused_coarse_fine=False,
     ):
         super().__init__()
         self.n_coarse = n_coarse
@@ -45,7 +44,6 @@ class NeRFRenderer(torch.nn.Module):
         self.sched = sched
         if sched is not None and len(sched) == 0:
             self.sched = None
-        self.using_fused_coarse_fine = fused_coarse_fine
         self.register_buffer(
             "iter_idx", torch.tensor(0, dtype=torch.long), persistent=True
         )
@@ -125,10 +123,7 @@ class NeRFRenderer(torch.nn.Module):
         z_samp,
         coarse=True,
         far=False,
-        sb=0,
-        get_fused_output=False,
-        fused_mask=None,
-        fused_output=None,
+        sb=0
     ):
         """
         Render RGB and depth for each ray using NeRF alpha-compositing formula,
@@ -155,9 +150,6 @@ class NeRFRenderer(torch.nn.Module):
             points = rays[:, None, :3] + z_samp.unsqueeze(2) * rays[:, None, 3:6]
             points = points.reshape(-1, 3)  # (B*K, 3)
 
-            if fused_mask is not None:
-                points = points[~fused_mask]
-
             use_viewdirs = hasattr(model, "use_viewdirs") and model.use_viewdirs
 
             val_all = []
@@ -173,13 +165,15 @@ class NeRFRenderer(torch.nn.Module):
 
             split_points = torch.split(points, eval_batch_size, dim=eval_batch_dim)
             if use_viewdirs:
-                dim1 = self.n_fine if fused_mask is not None else K
+                dim1 = K
                 viewdirs = rays[:, None, 3:6].expand(-1, dim1, -1)  # (B, K, 3)
                 if sb > 0:
                     viewdirs = viewdirs.reshape(sb, -1, 3)  # (SB, B'*K, 3)
                 else:
                     viewdirs = viewdirs.reshape(-1, 3)  # (B*K, 3)
-                split_viewdirs = torch.split(viewdirs, eval_batch_size, dim=eval_batch_dim)
+                split_viewdirs = torch.split(
+                    viewdirs, eval_batch_size, dim=eval_batch_dim
+                )
                 for pnts, dirs in zip(split_points, split_viewdirs):
                     val_all.append(model(pnts, coarse=coarse, viewdirs=dirs))
             else:
@@ -189,21 +183,10 @@ class NeRFRenderer(torch.nn.Module):
             viewdirs = None
             # (B*K, 4) OR (SB, B'*K, 4)
             out = torch.cat(val_all, dim=eval_batch_dim)
-            if fused_mask is not None:
-                n_outputs = model.d_out
-                tmp = torch.empty(B * K, n_outputs, device=out.device)
-                tmp[fused_mask] = fused_output
-                tmp[~fused_mask] = out.reshape(-1, n_outputs)
-                out = tmp
             out = out.reshape(B, K, -1)  # (B, K, 4 or 5)
 
             rgbs = out[..., :3]  # (B, K, 3)
             sigmas = out[..., 3]  # (B, K)
-            if get_fused_output:
-                outputs_for_fine = [rgbs, out[..., 3:4]]
-                fused_output = torch.cat(outputs_for_fine, dim=-1)
-            else:
-                fused_output = None
             if self.training and self.noise_std > 0.0:
                 sigmas = sigmas + torch.randn_like(sigmas) * self.noise_std
 
@@ -229,7 +212,6 @@ class NeRFRenderer(torch.nn.Module):
                 weights,
                 rgb_final,
                 depth_final,
-                fused_output,
             )
 
     def forward(
@@ -266,10 +248,9 @@ class NeRFRenderer(torch.nn.Module):
                 model,
                 rays,
                 z_coarse,
-                coarse=None if self.using_fused_coarse_fine else True,
+                coarse=True,
                 far=not self.using_bg,
-                sb=superbatch_size,
-                get_fused_output=self.using_fused_coarse_fine,
+                sb=superbatch_size
             )
             # only output uncertainties for fine model
             outputs = DotMap(
@@ -292,20 +273,13 @@ class NeRFRenderer(torch.nn.Module):
                     )  # (B, Kfd)
                 z_combine = torch.cat(all_samps, dim=-1)  # (B, Kc + Kf)
                 z_combine_sorted, argsort = torch.sort(z_combine, dim=-1)
-                if self.using_fused_coarse_fine:
-                    fused_mask = (argsort < self.n_coarse).reshape(-1)  # (B*K)
-                    fused_output = coarse_composite[4].reshape(-1, 4)  # (B*Kc, 4)
-                else:
-                    fused_mask = fused_output = None
                 fine_composite = self.composite(
                     model,
                     rays,
                     z_combine_sorted,
                     coarse=False,
                     far=not self.using_bg,
-                    sb=superbatch_size,
-                    fused_mask=fused_mask,
-                    fused_output=fused_output,
+                    sb=superbatch_size
                 )
                 outputs.fine = self._format_outputs(
                     fine_composite,
@@ -321,7 +295,7 @@ class NeRFRenderer(torch.nn.Module):
         superbatch_size,
         want_weights=False,
     ):
-        weights, rgb, depth, fused = rendered_outputs
+        weights, rgb, depth = rendered_outputs
         if superbatch_size > 0:
             rgb = rgb.reshape(superbatch_size, -1, 3)
             depth = depth.reshape(superbatch_size, -1)
@@ -362,5 +336,4 @@ class NeRFRenderer(torch.nn.Module):
             lindisp=lindisp,
             eval_batch_size=conf.get_int("eval_batch_size", 200000),
             sched=conf.get_list("sched", None),
-            fused_coarse_fine=conf.get_bool("fused_coarse_fine", False),
         )

@@ -15,16 +15,24 @@ class DVRDataset(torch.utils.data.Dataset):
     """
 
     def __init__(
-        self, path, stage="train", list_prefix="softras_",
-        image_size=None, sub_format='shapenet', scale_focal=True,
-        max_imgs=100000, z_near=1.2, z_far=4.0, skip_step=None
+        self,
+        path,
+        stage="train",
+        list_prefix="softras_",
+        image_size=None,
+        sub_format="shapenet",
+        scale_focal=True,
+        max_imgs=100000,
+        z_near=1.2,
+        z_far=4.0,
+        skip_step=None,
     ):
         """
         :param path dataset root path, contains metadata.yml
         :param stage train | val | test
         :param list_prefix prefix for split lists: <list_prefix>[train, val, test].lst
         :param image_size result image size (resizes if different); None to keep original size
-        :param sub_format shapenet | dtu | tnt
+        :param sub_format shapenet | dtu dataset sub-type.
         :param scale_focal if true, assume focal length is specified for
         image of side length 2 instead of actual image size. This is used
         where image coordinates are placed in [-1, 1].
@@ -65,20 +73,11 @@ class DVRDataset(torch.utils.data.Dataset):
             len(self.all_objs),
             "objs",
             "type:",
-            sub_format
+            sub_format,
         )
 
         self.image_size = image_size
-        if sub_format == 'dtu':
-            self._coord_trans_world = torch.tensor(
-                [[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]],
-                dtype=torch.float32,
-            )
-            self._coord_trans_cam = torch.tensor(
-                [[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]],
-                dtype=torch.float32,
-            )
-        elif sub_format == 'tnt':
+        if sub_format == "dtu":
             self._coord_trans_world = torch.tensor(
                 [[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]],
                 dtype=torch.float32,
@@ -88,14 +87,10 @@ class DVRDataset(torch.utils.data.Dataset):
                 dtype=torch.float32,
             )
         else:
-            #  self._coord_trans_world = torch.tensor(
-            #      [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
-            #      dtype=torch.float32,
-            #  )
             self._coord_trans_world = torch.tensor(
-                    [[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]],
-                    dtype=torch.float32)
-
+                [[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]],
+                dtype=torch.float32,
+            )
             self._coord_trans_cam = torch.tensor(
                 [[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]],
                 dtype=torch.float32,
@@ -114,7 +109,11 @@ class DVRDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         cat, root_dir = self.all_objs[index]
 
-        rgb_paths = [x for x in glob.glob(os.path.join(root_dir, "image", "*")) if (x.endswith('.jpg') or x.endswith('.png'))]
+        rgb_paths = [
+            x
+            for x in glob.glob(os.path.join(root_dir, "image", "*"))
+            if (x.endswith(".jpg") or x.endswith(".png"))
+        ]
         rgb_paths = sorted(rgb_paths)
         mask_paths = sorted(glob.glob(os.path.join(root_dir, "mask", "*.png")))
         if len(mask_paths) == 0:
@@ -135,13 +134,13 @@ class DVRDataset(torch.utils.data.Dataset):
         all_masks = []
         all_bboxes = []
         focal = None
-        if self.sub_format != 'shapenet':
+        if self.sub_format != "shapenet":
             fx, fy, cx, cy = 0.0, 0.0, 0.0, 0.0
 
         for idx, (rgb_path, mask_path) in enumerate(zip(rgb_paths, mask_paths)):
             i = sel_indices[idx]
             img = imageio.imread(rgb_path)[..., :3]
-            if self.scale_focal and not self.sub_format == 'dtu':
+            if self.scale_focal and not self.sub_format == "dtu":
                 x_scale = img.shape[1] / 2.0
                 y_scale = img.shape[0] / 2.0
                 xy_delta = 1.0
@@ -154,24 +153,17 @@ class DVRDataset(torch.utils.data.Dataset):
                 if len(mask.shape) == 2:
                     mask = mask[..., None]
                 mask = mask[..., :1]
-            if self.sub_format != 'shapenet':
-                if self.sub_format == 'tnt':
-                    # Already decomposed in cameras.npz
-                    # Used for custom Tanks and Temples data
-                    pose = all_cam["world_mat_inv_" + str(i)]
-                    K = all_cam["camera_mat_" + str(i)]
+            if self.sub_format == "dtu":
+                # Decompose projection matrix
+                P = all_cam["world_mat_" + str(i)]
+                P = P[:3]
 
-                elif self.sub_format == 'dtu':
-                    # Decompose projection matrix
-                    P = all_cam["world_mat_" + str(i)]
-                    P = P[:3]
+                K, R, t = cv2.decomposeProjectionMatrix(P)[:3]
+                K = K / K[2, 2]
 
-                    K, R, t = cv2.decomposeProjectionMatrix(P)[:3]
-                    K = K / K[2, 2]
-
-                    pose = np.eye(4, dtype=np.float32)
-                    pose[:3, :3] = R.transpose()
-                    pose[:3, 3] = (t[:3] / t[3])[:, 0]
+                pose = np.eye(4, dtype=np.float32)
+                pose[:3, :3] = R.transpose()
+                pose[:3, 3] = (t[:3] / t[3])[:, 0]
 
                 scale_mtx = all_cam.get("scale_mat_" + str(i))
                 if scale_mtx is not None:
@@ -194,8 +186,7 @@ class DVRDataset(torch.utils.data.Dataset):
                 else:
                     extr_inv_mtx = all_cam[wmat_key]
                     if extr_inv_mtx.shape[0] == 3:
-                        extr_inv_mtx = np.vstack((extr_inv_mtx,
-                            np.array([0, 0, 0, 1])))
+                        extr_inv_mtx = np.vstack((extr_inv_mtx, np.array([0, 0, 0, 1])))
                     extr_inv_mtx = np.linalg.inv(extr_inv_mtx)
 
                 intr_mtx = all_cam["camera_mat_" + str(i)]
@@ -217,7 +208,11 @@ class DVRDataset(torch.utils.data.Dataset):
                 dtype=torch.float32,
             )
             #  pose = self._coord_trans_world @ tl @ torch.tensor(pose, dtype=torch.float32) @ tr @ self._coord_trans_cam
-            pose = self._coord_trans_world @ torch.tensor(pose, dtype=torch.float32) @ self._coord_trans_cam
+            pose = (
+                self._coord_trans_world
+                @ torch.tensor(pose, dtype=torch.float32)
+                @ self._coord_trans_cam
+            )
 
             img_tensor = self.image_to_tensor(img)
             if mask_path is not None:
@@ -241,7 +236,7 @@ class DVRDataset(torch.utils.data.Dataset):
             all_imgs.append(img_tensor)
             all_poses.append(pose)
 
-        if self.sub_format != 'shapenet':
+        if self.sub_format != "shapenet":
             fx /= len(rgb_paths)
             fy /= len(rgb_paths)
             cx /= len(rgb_paths)
@@ -262,7 +257,7 @@ class DVRDataset(torch.utils.data.Dataset):
         if self.image_size is not None and all_imgs.shape[-2:] != self.image_size:
             scale = self.image_size[0] / all_imgs.shape[-2]
             focal *= scale
-            if self.sub_format != 'shapenet':
+            if self.sub_format != "shapenet":
                 c *= scale
             elif mask_path is not None:
                 all_bboxes *= scale
@@ -280,7 +275,7 @@ class DVRDataset(torch.utils.data.Dataset):
         }
         if all_masks is not None:
             result["masks"] = all_masks
-        if self.sub_format != 'shapenet':
+        if self.sub_format != "shapenet":
             result["c"] = c
         else:
             result["bbox"] = all_bboxes

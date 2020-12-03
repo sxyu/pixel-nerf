@@ -99,7 +99,7 @@ class ImplicitNet(nn.Module):
     def forward(self, x, combine_inner_dims=(1,)):
         """
         :param x (..., d_in)
-        :param combine_inner_dims Combining dimensions for use with multiview PIFu.
+        :param combine_inner_dims Combining dimensions for use with multiview inputs.
         Tensor will be reshaped to (-1, combine_inner_dims, ...) and reduced using combine_type
         on dim 1, at combine_layer
         """

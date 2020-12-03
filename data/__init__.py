@@ -1,28 +1,25 @@
 import os
 
 from .MultiObjectDataset import MultiObjectDataset
-from .DISNDataset import DISNDataset
 from .DVRDataset import DVRDataset
 from .SRNDataset import SRNDataset
 
-from .data_util import split_dataset
+from .data_util import ColorJitterDataset
 
 
 def get_split_dataset(dataset_type, datadir, want_split="all", **kwargs):
     if dataset_type == "srn":
+        # For ShapeNet single-category (from SRN)
         train_set = SRNDataset(datadir, stage="train", **kwargs)
         val_set = SRNDataset(datadir, stage="val", **kwargs)
         test_set = SRNDataset(datadir, stage="test", **kwargs)
     elif dataset_type == "multi_obj":
+        # For multiple-object
         train_set = MultiObjectDataset(os.path.join(datadir, "train"))
         test_set = MultiObjectDataset(os.path.join(datadir, "test"))
         val_set = MultiObjectDataset(os.path.join(datadir, "val"))
-    elif dataset_type == "disn":
-        train_set = DISNDataset(datadir, stage="train", **kwargs)
-        test_set = DISNDataset(datadir, stage="test", **kwargs)
-        val_set = test_set  # Not yet created
     elif dataset_type == "dvr":
-        # For category agnostic training
+        # For ShapeNet category agnostic training
         train_set = DVRDataset(datadir, stage="train", **kwargs)
         val_set = DVRDataset(datadir, stage="val", **kwargs)
         test_set = DVRDataset(datadir, stage="test", **kwargs)
@@ -31,26 +28,40 @@ def get_split_dataset(dataset_type, datadir, want_split="all", **kwargs):
         train_set = DVRDataset(datadir, stage="train", list_prefix="gen_", **kwargs)
         val_set = DVRDataset(datadir, stage="val", list_prefix="gen_", **kwargs)
         test_set = DVRDataset(datadir, stage="test", list_prefix="gen_", **kwargs)
-    elif dataset_type == "dvr_choy":
-        # For Choy et al experiments
-        train_set = DVRDataset(datadir, stage="train", list_prefix="gen_",
-                image_size=(137, 137), scale_focal=False, z_near=0.4, z_far=1.5, **kwargs)
-        val_set = DVRDataset(datadir, stage="val", list_prefix="gen_",
-                image_size=(137, 137), scale_focal=False, z_near=0.4, z_far=1.5, **kwargs)
-        test_set = val_set  # Not separated
-    elif dataset_type == "dvr_dtu" or dataset_type == "dvr_tnt" or dataset_type == "dvr_dtumvs":
-        list_prefix = "mvsnet_" if dataset_type == "dvr_dtumvs" else "new_"
-        sub = 'dtu' if dataset_type.startswith("dvr_dtu") else 'tnt'
-
-        train_set = DVRDataset(datadir, stage="train",
-                list_prefix=list_prefix, max_imgs=49,
-                sub_format=sub, z_near=0.1, z_far=5.0, **kwargs)
-        val_set = DVRDataset(datadir, stage="val",
-                list_prefix=list_prefix, max_imgs=49,
-                sub_format=sub, z_near=0.1, z_far=5.0, **kwargs)
-        test_set = DVRDataset(datadir, stage="test",
-                list_prefix=list_prefix, max_imgs=49,
-                sub_format=sub, z_near=0.1, z_far=5.0, **kwargs)
+    elif dataset_type == "dvr_dtu":
+        # DTU dataset
+        list_prefix = "new_"
+        train_set = DVRDataset(
+            datadir,
+            stage="train",
+            list_prefix=list_prefix,
+            max_imgs=49,
+            sub_format="dtu",
+            z_near=0.1,
+            z_far=5.0,
+            **kwargs
+        )
+        val_set = DVRDataset(
+            datadir,
+            stage="val",
+            list_prefix=list_prefix,
+            max_imgs=49,
+            sub_format="dtu",
+            z_near=0.1,
+            z_far=5.0,
+            **kwargs
+        )
+        test_set = DVRDataset(
+            datadir,
+            stage="test",
+            list_prefix=list_prefix,
+            max_imgs=49,
+            sub_format="dtu",
+            z_near=0.1,
+            z_far=5.0,
+            **kwargs
+        )
+        train_set = ColorJitterDataset(train_set)
     else:
         raise NotImplementedError("Unsupported dataset type", dataset_type)
 

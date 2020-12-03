@@ -1,4 +1,4 @@
-from .encoder import PIFuEncoder, ImageEncoder
+from .encoder import SpatialEncoder, ImageEncoder
 from .resnetfc import ResnetFC
 
 
@@ -16,9 +16,9 @@ def make_mlp(conf, d_in, d_latent=0, allow_empty=False, **kwargs):
 
 
 def make_encoder(conf, **kwargs):
-    enc_type = conf.get_string("type", "pifu")  # pifu | voxel | global
-    if enc_type == "pifu":
-        net = PIFuEncoder.from_conf(conf, **kwargs)
+    enc_type = conf.get_string("type", "spatial")  # spatial | global
+    if enc_type == "spatial":
+        net = SpatialEncoder.from_conf(conf, **kwargs)
     elif enc_type == "global":
         net = ImageEncoder.from_conf(conf, **kwargs)
     else:

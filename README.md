@@ -16,4 +16,6 @@ TBA
 
 # Acknowledgements
 
-Parts of the code were borrowed from kwea123's NeRF implementation: https://github.com/kwea123/nerf_pl
+Parts of the code were based on from kwea123's NeRF implementation: https://github.com/kwea123/nerf_pl.
+Some functions are borrowed from DVR https://github.com/autonomousvision/differentiable_volumetric_rendering
+and PIFu https://github.com/shunsukesaito/PIFu/issues?q=is%3Aissue+is%3Aclosed
