@@ -29,19 +29,18 @@ class SpatialEncoder(nn.Module):
     ):
         """
         :param backbone Backbone network. Either custom, in which case
-        model.resnet.ConvEncoder is used OR resnet*, in which case a model
-        from torchvision is used
-        e.g. resnet34 | resnet18
+        model.custom_encoder.ConvEncoder is used OR resnet18/resnet34, in which case the relevant
+        model from torchvision is used
         :param num_layers number of resnet layers to use, 1-5
-        :param pretrained Whether to use model pretrained on ImageNet
+        :param pretrained Whether to use model weights pretrained on ImageNet
         :param index_interp Interpolation to use for indexing
         :param index_padding Padding mode to use for indexing, border | zeros | reflection
         :param upsample_interp Interpolation to use for upscaling latent code
         :param feature_scale factor to scale all latent by. Useful (<1) if image
         is extremely large, to fit in memory.
         :param use_first_pool if false, skips first maxpool layer to avoid downscaling image
-        features too much
-        :param norm_type norm type to applied; pretrained model uses batch
+        features too much (ResNet only)
+        :param norm_type norm type to applied; pretrained model must use batch
         """
         super().__init__()
 
@@ -56,7 +55,7 @@ class SpatialEncoder(nn.Module):
         if self.use_custom_resnet:
             print("WARNING: Custom encoder is experimental only")
             print("Using simple convolutional encoder")
-            self.model = ConvEncoder(3)
+            self.model = ConvEncoder(3, norm_layer=norm_layer)
             self.latent_size = self.model.dims[-1]
         else:
             print("Using torchvision", backbone, "encoder")
@@ -108,7 +107,6 @@ class SpatialEncoder(nn.Module):
                 padding_mode=self.index_padding,
             )
             return samples[:, :, :, 0]  # (B, C, N)
-
 
     def forward(self, x):
         """

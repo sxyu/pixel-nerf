@@ -22,7 +22,7 @@ def marching_cubes(
 ):
     """
     Run marching cubes on network. Uses PyMCubes.
-    WARNING: does not make sense with viewdirs in current form, since
+    WARNING: does not make much sense with viewdirs in current form, since
     sigma depends on viewdirs.
     :param occu_net main NeRF type network
     :param c1 corner 1 of marching cube bounds x,y,z
@@ -37,7 +37,7 @@ def marching_cubes(
     """
     if occu_net.use_viewdirs:
         warnings.warn(
-            "Running marching cubes with view dirs, output may not make sense"
+            "Running marching cubes with fake view dirs (pointing to origin), output may be invalid"
         )
     with torch.no_grad():
         grid = util.gen_grid(*zip(c1, c2, reso), ij_indexing=True)

@@ -42,9 +42,7 @@ class PixelNeRFNet(torch.nn.Module):
         self.use_viewdirs = conf.get_bool("use_viewdirs", False)
 
         # Global image features?
-        self.use_global_encoder = conf.get_bool(
-            "use_global_encoder", False
-        )
+        self.use_global_encoder = conf.get_bool("use_global_encoder", False)
 
         d_latent = self.encoder.latent_size if self.use_encoder else 0
         d_in = 3 if self.use_xyz else 1
@@ -103,7 +101,9 @@ class PixelNeRFNet(torch.nn.Module):
         self.num_objs = images.size(0)
         if len(images.shape) == 5:
             assert len(poses.shape) == 4
-            assert poses.size(1) == images.size(1)  # Be consistent with NS = num input views
+            assert poses.size(1) == images.size(
+                1
+            )  # Be consistent with NS = num input views
             self.num_views_per_obj = images.size(1)
             images = images.reshape(-1, *images.shape[2:])
             poses = poses.reshape(-1, 4, 4)
@@ -126,7 +126,7 @@ class PixelNeRFNet(torch.nn.Module):
             # Vector f: fx = fy = f_i *for view i*
             # Length should match NS (or 1 for broadcast)
             focal = focal.unsqueeze(-1).repeat((1, 2))
-        # Otherwise, can specify as 
+        # Otherwise, can specify as
         focal[..., 1] *= -1.0
         self.focal = focal.float()
 
@@ -283,12 +283,11 @@ class PixelNeRFNet(torch.nn.Module):
         Your can put a checkpoint at checkpoints/<exp>/pixel_nerf_init to use as initialization.
         :param opt_init if true, loads from init checkpoint instead of usual even when resuming
         """
+        # TODO: make backups
         if opt_init and not args.resume:
             return
         ckpt_name = (
-            "pixel_nerf_init"
-            if opt_init or not args.resume
-            else "pixel_nerf_latest"
+            "pixel_nerf_init" if opt_init or not args.resume else "pixel_nerf_latest"
         )
         model_path = "%s/%s/%s" % (args.checkpoints_path, args.name, ckpt_name)
 

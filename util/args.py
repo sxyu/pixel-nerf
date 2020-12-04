@@ -58,12 +58,6 @@ def parse_args(
         help="visualization output directory",
     )
     parser.add_argument(
-        "--skip_epochs",
-        type=int,
-        default=0,
-        help="DEPRECATED: number of epochs to skip",
-    )
-    parser.add_argument(
         "--epochs",
         type=int,
         default=default_num_epochs,
@@ -75,9 +69,6 @@ def parse_args(
     )
     parser.add_argument(
         "--datadir", "-D", type=str, default=default_datadir, help="Dataset directory"
-    )
-    parser.add_argument(
-        "--amp", action="store_true", help="use auto mixed precision, if applicable"
     )
     if callback is not None:
         parser = callback(parser)

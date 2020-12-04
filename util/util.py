@@ -67,20 +67,6 @@ def repeat_interleave(input, repeats, dim):
     return output.reshape(-1, *input.shape[1:])
 
 
-IMAGENET_MEAN = (0.485, 0.456, 0.406)
-IMAGENET_STD = (0.229, 0.224, 0.225)
-
-
-def get_image_to_tensor():
-    return transforms.Compose(
-        [
-            transforms.ToTensor(),
-            #  transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-            transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
-        ]
-    )
-
-
 def get_image_to_tensor_balanced(image_size=0):
     ops = []
     if image_size > 0:
@@ -97,22 +83,6 @@ def get_image_to_tensor_balanced(image_size=0):
 def get_mask_to_tensor():
     return transforms.Compose(
         [transforms.ToTensor(), transforms.Normalize((0.0,), (1.0,))]
-    )
-
-
-def normalize_imagenet(image):
-    if isinstance(image, np.ndarray):
-        return (image - np.array(IMAGENET_MEAN)) / np.array(IMAGENET_STD)
-    return (image - torch.tensor(IMAGENET_MEAN, device=image.device)) / torch.tensor(
-        IMAGENET_STD, device=image.device
-    )
-
-
-def unnormalize_imagenet(image):
-    if isinstance(image, np.ndarray):
-        return image * np.array(IMAGENET_STD) + np.array(IMAGENET_MEAN)
-    return image * torch.tensor(IMAGENET_STD, device=image.device) + torch.tensor(
-        IMAGENET_MEAN, device=image.device
     )
 
 
@@ -364,32 +334,6 @@ def pose_spherical(theta, phi, radius):
     return c2w
 
 
-def profiler(enable=True):
-    """
-    Create a profiler object
-    """
-    if enable:
-        import time
-
-        start = time.time()
-
-        def profile_once(msg=None, sync_cuda=True):
-            nonlocal start
-            if sync_cuda:
-                torch.cuda.synchronize()
-            end = time.time()
-            if msg is not None:
-                print(msg + ":", float(end - start) * 1000, "ms")
-            start = end
-
-    else:
-
-        def profile_once(msg=None, sync_cuda=True):
-            pass
-
-    return profile_once
-
-
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
@@ -451,45 +395,6 @@ def make_conv_2d(
         nn.Conv2d(
             dim_in, dim_out, kernel_size=kernel_size, bias=use_bias, stride=stride
         )
-    )
-    if zero_init:
-        nn.init.zeros_(conv_block[-1].weight)
-    #  else:
-    #  nn.init.kaiming_normal_(conv_block[-1].weight)
-    if norm_layer is not None:
-        conv_block.append(norm_layer(dim_out))
-
-    if activation is not None:
-        conv_block.append(activation)
-    return nn.Sequential(*conv_block)
-
-
-def make_conv_3d(
-    dim_in,
-    dim_out,
-    padding_type="replicate",
-    norm_layer=None,
-    activation=None,
-    kernel_size=3,
-    use_bias=False,
-    stride=1,
-    no_pad=False,
-    zero_init=False,
-):
-    conv_block = []
-    amt = kernel_size // 2
-    if stride > 1 and not no_pad:
-        raise NotImplementedError("Padding with stride > 1 not supported")
-    if amt > 0 and not no_pad:
-        if padding_type == "replicate":
-            conv_block += [nn.ReplicationPad3d(1)]
-        elif padding_type == "zero":
-            conv_block += [nn.ZeroPad3d(amt)]
-        else:
-            raise NotImplementedError("padding [%s] is not implemented" % padding_type)
-
-    conv_block.append(
-        nn.Conv3d(dim_in, dim_out, kernel_size=kernel_size, bias=use_bias, stride=1)
     )
     if zero_init:
         nn.init.zeros_(conv_block[-1].weight)
@@ -575,16 +480,6 @@ def combine_interleaved(t, inner_dims=(1,), agg_type="average"):
     else:
         raise NotImplementedError("Unsupported combine type " + agg_type)
     return t
-
-
-def get_module(net):
-    """
-    Shorthand for either net.module (if net is instance of DataParallel) or net
-    """
-    if isinstance(net, torch.nn.DataParallel):
-        return net.module
-    else:
-        return net
 
 
 def psnr(pred, target):

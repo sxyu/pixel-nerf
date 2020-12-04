@@ -116,15 +116,7 @@ class NeRFRenderer(torch.nn.Module):
         z_samp = torch.max(torch.min(z_samp, rays[:, -1:]), rays[:, -2:-1])
         return z_samp
 
-    def composite(
-        self,
-        model,
-        rays,
-        z_samp,
-        coarse=True,
-        far=False,
-        sb=0
-    ):
+    def composite(self, model, rays, z_samp, coarse=True, far=False, sb=0):
         """
         Render RGB and depth for each ray using NeRF alpha-compositing formula,
         given sampled positions along each ray (see sample_*)
@@ -250,7 +242,7 @@ class NeRFRenderer(torch.nn.Module):
                 z_coarse,
                 coarse=True,
                 far=not self.using_bg,
-                sb=superbatch_size
+                sb=superbatch_size,
             )
             # only output uncertainties for fine model
             outputs = DotMap(
@@ -279,7 +271,7 @@ class NeRFRenderer(torch.nn.Module):
                     z_combine_sorted,
                     coarse=False,
                     far=not self.using_bg,
-                    sb=superbatch_size
+                    sb=superbatch_size,
                 )
                 outputs.fine = self._format_outputs(
                     fine_composite,
@@ -324,7 +316,7 @@ class NeRFRenderer(torch.nn.Module):
             self.last_sched += 1
 
     @classmethod
-    def from_conf(cls, conf, white_bkgd=False, lindisp=False):
+    def from_conf(cls, conf, white_bkgd=False, lindisp=False, eval_batch_size=100000):
         return cls(
             conf.get_int("n_coarse", 128),
             conf.get_int("n_fine", 0),
@@ -334,6 +326,6 @@ class NeRFRenderer(torch.nn.Module):
             depth_std=conf.get_float("depth_std", 0.01),
             white_bkgd=white_bkgd,
             lindisp=lindisp,
-            eval_batch_size=conf.get_int("eval_batch_size", 200000),
+            eval_batch_size=conf.get_int("eval_batch_size", eval_batch_size),
             sched=conf.get_list("sched", None),
         )
