@@ -5,7 +5,7 @@ from pyhocon import ConfigFactory
 
 def parse_args(
     callback=None,
-    default_conf="conf/resnet_fine.conf",
+    default_conf="conf/resnet_fine_mv.conf",
     default_expname="example",
     default_num_epochs=10000,
     default_lr=1e-4,

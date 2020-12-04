@@ -537,3 +537,13 @@ def rot_to_quat(R):
     q[:, 2] = (R02 - R20) / (4 * q[:, 0])
     q[:, 3] = (R10 - R01) / (4 * q[:, 0])
     return q
+
+
+def get_module(net):
+    """
+    Shorthand for either net.module (if net is instance of DataParallel) or net
+    """
+    if isinstance(net, torch.nn.DataParallel):
+        return net.module
+    else:
+        return net
