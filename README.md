@@ -3,12 +3,14 @@
 Alex Yu, Vickie Ye, Matthew Tancik, Angjoo Kanazawa<br>
 UC Berkeley
 
+**Note: We are in the process of cleaning up code and porting experiments to this repository.
+Currently, an implementation of the core model is provided.**
+Please stay tuned for training code and more documentation.
+
+![Teaser](https://raw.github.com/sxyu/pixel-nerf/master/readme-img/paper_teaser.jpg)
+
 This is the official code repository of our paper, pixelNeRF.
 
-*Note: We are in the process of cleaning up code and porting experiments to this repository.
-Currently, an implementation of the core model is provided.*
-
-![Teaser](https://raw.github.com/sxyu/pixel-nerf/master/readme-img/paper_teaser.png)
 
 # BibTeX
 
