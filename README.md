@@ -5,7 +5,8 @@ UC Berkeley
 
 **Note: We are in the process of cleaning up code and porting experiments to this repository.
 Currently, an implementation of the core model is provided.**
-Please stay tuned for training code and more documentation.
+Some untested changes were made after refactoring.
+Complete training code and more documentation are coming soon, please stay tuned.
 
 ![Teaser](https://raw.github.com/sxyu/pixel-nerf/master/readme-img/paper_teaser.jpg)
 
