@@ -14,6 +14,29 @@ arXiv: http://arxiv.org/abs/2012.02190
 
 This is the official code repository of our paper, pixelNeRF.
 
+# Datasets
+
+- DTU dataset. Please obtain from 
+https://drive.google.com/drive/folders/195u2QBAB3apozHZNVOcGuKSognKlpw0A?usp=sharing
+
+- ShapeNet 64x64 dataset from NMR, for main ShapeNet experiments. Obtain from
+https://s3.eu-central-1.amazonaws.com/avg-projects/differentiable_volumetric_rendering/data/NMR_Dataset.zip
+(Hosted by DVR authors) 
+
+- SRN experiments.
+  - SRN *fixed* car dataset from
+    https://drive.google.com/file/d/1AUzjr6_JGXvZ1N2eqjOol2wwEZ8E2Pk_/view?usp=sharing
+  - SRN chair dataset from (TBA)
+
+- Two-object experiments.
+Obtain our dataset from
+https://drive.google.com/drive/folders/195u2QBAB3apozHZNVOcGuKSognKlpw0A?usp=sharing
+
+While we could have used a common data format, we chose to keep
+DTU and ShapeNet (NMR) datasets in DVR's format and SRN data in original SRN format.
+Our own two-object data is in NeRF's format.
+Data adapters are built into the code.
+
 # Instructions
 
 TBA
