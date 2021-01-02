@@ -14,10 +14,26 @@ arXiv: http://arxiv.org/abs/2012.02190
 
 This is the official code repository of our paper, pixelNeRF.
 
+# Instructions
+
+TBA
+
+# Training instructions
+
+TBA
 
 # BibTeX
 
-TBA
+```
+@misc{yu2020pixelnerf,
+      title={pixelNeRF: Neural Radiance Fields from One or Few Images}, 
+      author={Alex Yu and Vickie Ye and Matthew Tancik and Angjoo Kanazawa},
+      year={2020},
+      eprint={2012.02190},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+```
 
 # Acknowledgements
 
