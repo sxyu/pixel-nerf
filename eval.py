@@ -30,7 +30,7 @@ def extra_args(parser):
         help="Split of data to use train | val | test",
     )
     parser.add_argument(
-        "--primary",
+        "--source",
         "-P",
         type=str,
         default="64",
@@ -54,7 +54,7 @@ def extra_args(parser):
         "-L",
         type=str,
         default="",
-        help="Path to source view list e.g. src_dvr.txt; if specified, overrides primary/P",
+        help="Path to source view list e.g. src_dvr.txt; if specified, overrides source/P",
     )
 
     parser.add_argument(
@@ -171,17 +171,17 @@ if args.coarse:
 z_near = dset.z_near
 z_far = dset.z_far
 
-use_primary_lut = len(args.viewlist) > 0
-if use_primary_lut:
+use_source_lut = len(args.viewlist) > 0
+if use_source_lut:
     print("Using views from list", args.viewlist)
     with open(args.viewlist, "r") as f:
         tmp = [x.strip().split() for x in f.readlines()]
-    primary_lut = {
+    source_lut = {
         x[0] + "/" + x[1]: torch.tensor(list(map(int, x[2:])), dtype=torch.long)
         for x in tmp
     }
 else:
-    primary = torch.tensor(list(map(int, args.primary.split())), dtype=torch.long)
+    source = torch.tensor(list(map(int, args.source.split())), dtype=torch.long)
 
 NV = dset[0]["images"].shape[0]
 
@@ -237,14 +237,14 @@ with torch.no_grad():
                     args.scale, H, W))
             H, W = Ht, Wt
 
-        if all_rays is None or use_primary_lut or args.free_pose:
-            if use_primary_lut:
+        if all_rays is None or use_source_lut or args.free_pose:
+            if use_source_lut:
                 obj_id = cat_name + "/" + obj_basename
-                primary = primary_lut[obj_id]
+                source = source_lut[obj_id]
 
-            NS = len(primary)
+            NS = len(source)
             src_view_mask = torch.zeros(NV, dtype=torch.bool)
-            src_view_mask[primary] = 1
+            src_view_mask[source] = 1
 
             focal = data["focal"][0]
             if isinstance(focal, float):

@@ -23,11 +23,11 @@ def extra_args(parser):
         help="Split of data to use train | val | test",
     )
     parser.add_argument(
-        "--primary",
+        "--source",
         "-P",
         type=str,
         default="64",
-        help="Primary view(s) in image, in increasing order. -1 to do random",
+        help="Source view(s) in image, in increasing order. -1 to do random",
     )
     parser.add_argument(
         "--num_views",
@@ -54,7 +54,7 @@ def extra_args(parser):
     parser.add_argument(
         "--black",
         action="store_true",
-        help="Force renderer to use a black background.",
+        help="Force renderer to use a black background. Use this for DTU only.",
     )
     parser.add_argument("--ray_batch_size", type=int, default=50000)
     return parser
@@ -111,9 +111,7 @@ renderer = NeRFRenderer.from_conf(
     eval_batch_size=args.ray_batch_size,
 ).to(device=device)
 
-# Get the distance from camera to origin, for normalization of z when training.
-# NOTE: we DO NOT actually need /camera location at test time.
-# I am using canonical coordinates only for convenience in current implementation.
+# Get the distance from camera to origin
 z_near = dset.z_near
 z_far = dset.z_far
 
@@ -187,10 +185,10 @@ render_rays = util.gen_rays(
 
 focal = focal.to(device=device)
 
-primary = torch.tensor(list(map(int, args.primary.split())), dtype=torch.long)
-NS = len(primary)
-random_primary = NS == 1 and primary[0] == -1
-assert not (primary >= NV).any()
+source = torch.tensor(list(map(int, args.source.split())), dtype=torch.long)
+NS = len(source)
+random_source = NS == 1 and source[0] == -1
+assert not (source >= NV).any()
 
 net.eval()
 renderer.eval()
@@ -200,11 +198,11 @@ if renderer.n_coarse < 64:
     renderer.n_fine = 128
 
 with torch.no_grad():
-    print("Encoding primary view(s)")
-    if random_primary:
+    print("Encoding source view(s)")
+    if random_source:
         src_view = torch.randint(0, NV, (1,))
     else:
-        src_view = primary
+        src_view = source
 
     net.encode(
         images[src_view].unsqueeze(0),
@@ -225,10 +223,8 @@ with torch.no_grad():
             all_rgb_fine.append(outputs.coarse.rgb)
     rgb_fine = torch.cat(all_rgb_fine)
     # rgb_fine (V*H*W, 3)
-    # depth_fine (V*H*W)
 
     frames = rgb_fine.view(-1, H, W, 3)
-    #  depth_fine = depth_fine.view(args.num_views, H, W, 1)
 
 print("Writing video")
 vid_name = "{:04}".format(args.subset)
@@ -236,7 +232,7 @@ if args.split == "test":
     vid_name = "t" + vid_name
 elif args.split == "val":
     vid_name = "v" + vid_name
-vid_name += "_v" + "_".join(map(lambda x: "{:03}".format(x), primary))
+vid_name += "_v" + "_".join(map(lambda x: "{:03}".format(x), source))
 vid_path = os.path.join(args.visual_path, args.name, "video" + vid_name + ".mp4")
 viewimg_path = os.path.join(
     args.visual_path, args.name, "video" + vid_name + "_view.jpg"

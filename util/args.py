@@ -5,7 +5,7 @@ from pyhocon import ConfigFactory
 
 def parse_args(
     callback=None,
-    default_conf="conf/resnet_fine_mv.conf",
+    default_conf="conf/default_mv.conf",
     default_expname="example",
     default_num_epochs=10000,
     default_lr=1e-4,
@@ -29,8 +29,8 @@ def parse_args(
         "--dataset_format",
         "-F",
         type=str,
-        default="srn",
-        help="Dataset format, nerf | srn | realestate",
+        default="dvr",
+        help="Dataset format, multi_obj | dvr | dvr_gen | dvr_dtu | srn",
     )
     parser.add_argument(
         "--exp_group_name",
