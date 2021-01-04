@@ -59,7 +59,6 @@ def extra_args(parser):
         action="store_true",
         help="Force renderer to use a black background. Use this for DTU only.",
     )
-    parser.add_argument("--ray_batch_size", type=int, default=50000)
     return parser
 
 

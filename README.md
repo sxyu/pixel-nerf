@@ -102,6 +102,8 @@ Generally, all scripts in the project take the following flags
 - `--split <train | val | test>`: data set split
 - `-S <subset_id>`: scene or object id to render
 - `--gpu_id <GPU>`: GPU id to use
+- `--ray_batch_size <sz>`: Batch size of rendered rays. Default is 50000; make it smaller if you run out of memory.
+    On large-memory GPUs, set it to 100000 for eval for better performance.
 
 Please refer the the following table
 
@@ -135,7 +137,7 @@ Append `--gpu_id=<GPU1>` after each command, and add `--extra_gpus=GPU ids separ
 Resume-capability is built-in, and you can simply run the command again to resume if the process is terminated.
 
 In all cases, a source-view specification is required. This can be either `-P` or `-L`. `-P 'view1 view2..'` specifies 
-a set of fixed input views. In contrast, `-L ` should point to a viewlist file (viewlist/) which specifies views to use for each object.
+a set of fixed input views. In contrast, `-L` should point to a viewlist file (viewlist/src_*.txt) which specifies views to use for each object.
 
 `-O <dirname>` specifies output directory name. Renderings and progress will be saved to this directory.
 

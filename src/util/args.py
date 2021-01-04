@@ -8,10 +8,11 @@ def parse_args(
     default_conf="conf/default_mv.conf",
     default_expname="example",
     default_data_format="dvr",
-    default_num_epochs=10000,
+    default_num_epochs=10000000,
     default_lr=1e-4,
     default_gamma=1.00,
     default_datadir="/home/group/data/chairs",
+    default_ray_batch_size=50000,
 ):
     parser = argparse.ArgumentParser()
     parser.add_argument("--conf", "-c", type=str, default=default_conf)
@@ -70,6 +71,9 @@ def parse_args(
     )
     parser.add_argument(
         "--datadir", "-D", type=str, default=default_datadir, help="Dataset directory"
+    )
+    parser.add_argument(
+        "--ray_batch_size", "-R", type=int, default=default_ray_batch_size, help="Ray batch size"
     )
     if callback is not None:
         parser = callback(parser)

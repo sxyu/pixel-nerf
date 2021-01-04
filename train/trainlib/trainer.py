@@ -6,13 +6,25 @@ import tqdm
 
 
 class Trainer:
-    def __init__(self, net, train_data_loader,
-            test_data_loader, args, conf, device=None):
+    def __init__(self, net, train_dataset,
+            test_dataset, args, conf, device=None):
         self.args = args
         self.net = net
-        self.train_data_loader = train_data_loader
-        self.test_data_loader = test_data_loader
-        self.num_total_batches = len(self.train_data_loader)
+        self.train_dataset = train_dataset
+        self.test_dataset = test_dataset
+
+        self.train_data_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=False
+        )
+        self.test_data_loader = torch.utils.data.DataLoader(
+            test_dataset,
+            batch_size=min(args.batch_size, 16),
+            shuffle=True,
+            num_workers=4,
+            pin_memory=False,
+        )
+
+        self.num_total_batches = len(self.train_dataset)
         self.exp_name = args.name
         self.save_interval = conf.get_int("save_interval")
         self.print_interval = conf.get_int("print_interval")
@@ -20,14 +32,11 @@ class Trainer:
         self.eval_interval = conf.get_int("eval_interval")
         self.num_epoch_repeats = conf.get_int("num_epoch_repeats", 1)
         self.num_epochs = args.epochs
-        self.save_tb_images = args.save_tb_images
         self.accu_grad = conf.get_int("accu_grad", 1)
         self.summary_path = os.path.join(args.logs_path, args.name)
         self.writer = SummaryWriter(self.summary_path)
 
-        self.use_amp = args.amp
-        self.fixed_test = args.fixed_test
-        self.test_idx = 0 if args.test_idx is None else args.test_idx
+        self.fixed_test = hasattr(args, 'fixed_test') and args.fixed_test
 
         os.makedirs(self.summary_path, exist_ok=True)
 
@@ -82,36 +91,34 @@ class Trainer:
         self.visual_path = os.path.join(self.args.visual_path, self.args.name)
         self.conf = conf
 
-        if self.use_amp:
-            from apex import amp
-
-            self.net, self.optim = amp.initialize(self.net, self.optim, opt_level="O1")
-
-    def loss_backward(self, loss):
-        if self.use_amp:
-            from apex import amp
-
-            with amp.scale_loss(loss, self.optim) as scaled_loss:
-                scaled_loss.backward()
-        else:
-            loss.backward()
-
-    def on_epoch(self, epoch):
-        pass
-
     def post_batch(self, epoch, batch):
+        """
+        Ran after each batch
+        """
         pass
 
     def extra_save_state(self):
+        """
+        Ran at each save step for saving extra state
+        """
         pass
 
-    def train_step(self, data):
+    def train_step(self, data, global_step):
+        """
+        Training step
+        """
         raise NotImplementedError()
 
-    def eval_step(self, data):
+    def eval_step(self, data, global_step):
+        """
+        Evaluation step
+        """
         raise NotImplementedError()
 
-    def vis_step(self, data):
+    def vis_step(self, data, global_step):
+        """
+        Visualization step
+        """
         return None, None
 
     def start(self):
@@ -119,14 +126,14 @@ class Trainer:
             return "loss " + (" ".join(k + ":" + str(losses[k]) for k in losses))
 
         def data_loop(dl):
+            """
+            Loop an iterable infinitely
+            """
             while True:
                 for x in iter(dl):
                     yield x
 
         test_data_iter = data_loop(self.test_data_loader)
-        if self.fixed_test:
-            for test_data in self.test_data_loader:
-                break
 
         step_id = self.start_iter_id
 
@@ -135,12 +142,11 @@ class Trainer:
             self.writer.add_scalar(
                 "lr", self.optim.param_groups[0]["lr"], global_step=step_id
             )
-            self.on_epoch(epoch)
 
             batch = 0
             for _ in range(self.num_epoch_repeats):
                 for data in self.train_data_loader:
-                    losses = self.train_step(data)
+                    losses = self.train_step(data, global_step=step_id)
                     loss_str = fmt_loss_str(losses)
                     if batch % self.print_interval == 0:
                         print(
@@ -154,11 +160,10 @@ class Trainer:
                         )
 
                     if batch % self.eval_interval == 0:
-                        if not self.fixed_test:
-                            test_data = next(test_data_iter)
+                        test_data = next(test_data_iter)
                         self.net.eval()
                         with torch.no_grad():
-                            test_losses = self.eval_step(test_data)
+                            test_losses = self.eval_step(test_data, global_step=step_id)
                         self.net.train()
                         test_loss_str = fmt_loss_str(test_losses)
                         self.writer.add_scalars("train", losses, global_step=step_id)
@@ -181,11 +186,13 @@ class Trainer:
 
                     if batch % self.vis_interval == 0:
                         print("generating visualization")
-                        if not self.fixed_test:
+                        if self.fixed_test:
+                            test_data = next(iter(self.test_data_loader))
+                        else:
                             test_data = next(test_data_iter)
                         self.net.eval()
                         with torch.no_grad():
-                            vis, vis_vals = self.vis_step(test_data)
+                            vis, vis_vals = self.vis_step(test_data, global_step=step_id)
                         if vis_vals is not None:
                             self.writer.add_scalars("vis", vis_vals, global_step=step_id)
                         self.net.train()
@@ -200,10 +207,6 @@ class Trainer:
                                 ),
                                 vis_u8,
                             )
-                            if self.save_tb_images:
-                                self.writer.add_image(
-                                    "vis", vis, global_step=step_id, dataformats="HWC"
-                                )
 
                     if (
                         batch == self.num_total_batches - 1

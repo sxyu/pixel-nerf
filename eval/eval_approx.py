@@ -35,11 +35,6 @@ def extra_args(parser):
         default="64",
         help="Source view(s) in image, in increasing order. -1 to use random 1 view.",
     )
-
-    parser.add_argument(
-        "--ray_batch_size", type=int, default=50000, help="Ray batch size"
-    )
-
     parser.add_argument(
         "--black",
         action="store_true",

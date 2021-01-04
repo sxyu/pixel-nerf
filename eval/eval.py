@@ -42,9 +42,6 @@ def extra_args(parser):
     parser.add_argument(
         "--eval_view_list", type=str, default=None, help="Path to eval view list"
     )
-    parser.add_argument(
-        "--ray_batch_size", type=int, default=50000, help="Ray batch size"
-    )
     parser.add_argument("--coarse", action="store_true", help="Coarse network as fine")
     parser.add_argument("--no_compare_gt", action="store_true")
     parser.add_argument(
