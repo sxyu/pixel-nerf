@@ -16,18 +16,18 @@ class ColorJitterDataset(torch.utils.data.Dataset):
         saturation_range=0.1,
         brightness_range=0.1,
         contrast_range=0.1,
+        extra_inherit_attrs=[],
     ):
         self.hue_range = [-hue_range, hue_range]
         self.saturation_range = [1 - saturation_range, 1 + saturation_range]
         self.brightness_range = [1 - brightness_range, 1 + brightness_range]
         self.contrast_range = [1 - contrast_range, 1 + contrast_range]
+        inherit_attrs = ['z_near', 'z_far', 'lindisp', 'base_path', 'image_to_tensor']
+        inherit_attrs.extend(extra_inherit_attrs)
 
         self.base_dset = base_dset
-        self.z_near = self.base_dset.z_near
-        self.z_far = self.base_dset.z_far
-        self.lindisp = self.base_dset.lindisp
-        self.base_path = self.base_dset.base_path
-        self.image_to_tensor = self.base_dset.image_to_tensor
+        for inherit_attr in inherit_attrs:
+            setattr(self, inherit_attr, getattr(self.base_dset, inherit_attr))
 
     def apply_color_jitter(self, images):
         # apply the same color jitter over batch of images

@@ -7,6 +7,7 @@ def parse_args(
     callback=None,
     default_conf="conf/default_mv.conf",
     default_expname="example",
+    default_data_format="dvr",
     default_num_epochs=10000,
     default_lr=1e-4,
     default_gamma=1.00,
@@ -29,7 +30,7 @@ def parse_args(
         "--dataset_format",
         "-F",
         type=str,
-        default="dvr",
+        default=default_data_format,
         help="Dataset format, multi_obj | dvr | dvr_gen | dvr_dtu | srn",
     )
     parser.add_argument(

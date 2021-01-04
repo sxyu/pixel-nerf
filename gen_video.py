@@ -120,7 +120,7 @@ print("Generating rays")
 dtu_format = hasattr(dset, "sub_format") and dset.sub_format == "dtu"
 
 if dtu_format:
-    print("Using DTU format")
+    print("Using DTU camera trajectory")
     # Use hard-coded pose interpolation from IDR for DTU
 
     t_in = np.array([0, 2, 3, 5, 6]).astype(np.float32)
@@ -157,9 +157,10 @@ if dtu_format:
         render_poses.append(new_pose)
     render_poses = torch.cat(render_poses, dim=0)
 else:
+    print("Using default (360 loop) camera trajectory")
     if args.radius == 0.0:
         radius = (z_near + z_far) * 0.5
-        print("Using default camera radius", radius)
+        print("> Using default camera radius", radius)
     else:
         radius = args.radius
 

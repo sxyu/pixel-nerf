@@ -135,12 +135,13 @@ class DVRDataset(torch.utils.data.Dataset):
         all_bboxes = []
         focal = None
         if self.sub_format != "shapenet":
+            # Prepare to average intrinsics over images
             fx, fy, cx, cy = 0.0, 0.0, 0.0, 0.0
 
         for idx, (rgb_path, mask_path) in enumerate(zip(rgb_paths, mask_paths)):
             i = sel_indices[idx]
             img = imageio.imread(rgb_path)[..., :3]
-            if self.scale_focal and not self.sub_format == "dtu":
+            if self.scale_focal:
                 x_scale = img.shape[1] / 2.0
                 y_scale = img.shape[0] / 2.0
                 xy_delta = 1.0
@@ -155,6 +156,7 @@ class DVRDataset(torch.utils.data.Dataset):
                 mask = mask[..., :1]
             if self.sub_format == "dtu":
                 # Decompose projection matrix
+                # DVR uses slightly different format for DTU set
                 P = all_cam["world_mat_" + str(i)]
                 P = P[:3]
 
@@ -207,7 +209,6 @@ class DVRDataset(torch.utils.data.Dataset):
                 [[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]],
                 dtype=torch.float32,
             )
-            #  pose = self._coord_trans_world @ tl @ torch.tensor(pose, dtype=torch.float32) @ tr @ self._coord_trans_cam
             pose = (
                 self._coord_trans_world
                 @ torch.tensor(pose, dtype=torch.float32)
@@ -217,7 +218,6 @@ class DVRDataset(torch.utils.data.Dataset):
             img_tensor = self.image_to_tensor(img)
             if mask_path is not None:
                 mask_tensor = self.mask_to_tensor(mask)
-                #  img_tensor = img_tensor * mask_tensor + (1.0 - mask_tensor)
 
                 rows = np.any(mask, axis=1)
                 cols = np.any(mask, axis=0)
