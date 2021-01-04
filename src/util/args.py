@@ -31,7 +31,7 @@ def parse_args(
         "--dataset_format",
         "-F",
         type=str,
-        default=default_data_format,
+        default=None,
         help="Dataset format, multi_obj | dvr | dvr_gen | dvr_dtu | srn",
     )
     parser.add_argument(
@@ -87,5 +87,11 @@ def parse_args(
     os.makedirs(os.path.join(args.checkpoints_path, args.name), exist_ok=True)
     os.makedirs(os.path.join(args.visual_path, args.name), exist_ok=True)
     conf = ConfigFactory.parse_file(args.conf)
+
+    fmt = conf.get_string('data.format', default_data_format)
     print("EXPERIMENT NAME:", args.name, "CONTINUE?", "yes" if args.resume else "no")
+
+    if args.dataset_format is None:
+        args.dataset_format = fmt
+    print("Dataset format:", args.dataset_format)
     return args, conf

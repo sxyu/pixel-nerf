@@ -15,7 +15,11 @@ dependencies:
       - imageio-ffmpeg
       - ipdb
       - pretrainedmodels
+      - lpips
   - scipy
+  - numpy
+  - matplotlib
   - pytorch==1.6.0
   - torchvision==0.7.0
   - scikit-image
+  - tqdm

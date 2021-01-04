@@ -8,6 +8,7 @@ from .model_util import make_encoder, make_mlp
 import torch.autograd.profiler as profiler
 from util import repeat_interleave
 import os
+import os.path as osp
 import warnings
 
 
@@ -307,8 +308,12 @@ class PixelNeRFNet(torch.nn.Module):
         Helper for saving weights according to argparse arguments
         :param opt_init if true, saves from init checkpoint instead of usual
         """
+        from shutil import copyfile
         ckpt_name = "pixel_nerf_init" if opt_init else "pixel_nerf_latest"
-        torch.save(
-            self.state_dict(),
-            "%s/%s/%s" % (args.checkpoints_path, args.name, ckpt_name),
-        )
+        backup_name = "pixel_nerf_init_backup" if opt_init else "pixel_nerf_backup"
+
+        ckpt_path = osp.join(args.checkpoints_path, args.name, ckpt_name)
+        ckpt_backup_path = osp.join(args.checkpoints_path, args.name, backup_name)
+
+        copyfile(ckpt_path, ckpt_backup_path)
+        torch.save(self.state_dict(), ckpt_path)

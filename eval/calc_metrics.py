@@ -9,6 +9,7 @@ This also computes LPIPS and is useful for double-checking metric is correct.
 """
 
 import os
+import os.path as osp
 import argparse
 import skimage.measure
 from tqdm import tqdm
@@ -17,6 +18,7 @@ import lpips
 import numpy as np
 import torch
 import imageio
+import json
 
 parser = argparse.ArgumentParser(
     description="Calculate PSNR for rendered images."
@@ -143,25 +145,25 @@ def run_map():
     total_objs = 0
 
     for cat in cats:
-        cat_root = os.path.join(data_root, cat)
-        if not os.path.isdir(cat_root):
+        cat_root = osp.join(data_root, cat)
+        if not osp.isdir(cat_root):
             continue
 
         objs = sorted([x for x in os.listdir(cat_root)])
 
         if len(list_name) > 0:
-            list_path = os.path.join(cat_root, list_name)
+            list_path = osp.join(cat_root, list_name)
             with open(list_path, 'r') as f:
                 split = set([x.strip() for x in f.readlines()])
             objs = [x for x in objs if x in split]
 
-        objs_rend = [os.path.join(render_root, fmt_obj_name(cat, x)) for x in objs]
+        objs_rend = [osp.join(render_root, fmt_obj_name(cat, x)) for x in objs]
 
-        objs = [os.path.join(cat_root, x) for x in objs]
-        objs = [x for x in objs if os.path.isdir(x)]
+        objs = [osp.join(cat_root, x) for x in objs]
+        objs = [x for x in objs if osp.isdir(x)]
 
         objs = list(zip(objs, objs_rend))
-        objs_avail = [x for x in objs if os.path.exists(x[1])]
+        objs_avail = [x for x in objs if osp.exists(x[1])]
         print(cat, 'TOTAL', len(objs), 'AVAILABLE', len(objs_avail))
         #  assert len(objs) == len(objs_avail)
         total_objs += len(objs)
@@ -184,17 +186,17 @@ def run_map():
 
 
     def isimage(path):
-        ext = os.path.splitext(path)[1]
+        ext = osp.splitext(path)[1]
         return ext == '.jpg' or ext == '.png'
 
 
     def process_obj(path, rend_path):
         if len(img_dir_name) > 0:
-            im_root = os.path.join(path, img_dir_name)
+            im_root = osp.join(path, img_dir_name)
         else:
             im_root = path
-        out_path = os.path.join(rend_path, 'metrics.txt')
-        if os.path.exists(out_path) and not args.overwrite:
+        out_path = osp.join(rend_path, 'metrics.txt')
+        if osp.exists(out_path) and not args.overwrite:
             return
         ims = [x for x in sorted(os.listdir(im_root)) if isimage(x)]
         psnr_avg = 0.0
@@ -203,18 +205,18 @@ def run_map():
         preds = []
         num_ims = 0
         if use_exclude_lut:
-            lut_key = os.path.basename(rend_path).replace('_', '/')
+            lut_key = osp.basename(rend_path).replace('_', '/')
             exclude_views = exclude_lut[lut_key]
         else:
             exclude_views = []
         exclude_views.extend(base_exclude_views)
 
         for im_name in ims:
-            im_path = os.path.join(im_root, im_name)
-            im_name_id = int(os.path.splitext(im_name)[0])
+            im_path = osp.join(im_root, im_name)
+            im_name_id = int(osp.splitext(im_name)[0])
             im_name_out = '{:06}.png'.format(im_name_id)
-            im_rend_path = os.path.join(rend_path, im_name_out)
-            if os.path.exists(im_rend_path) and im_name_id not in exclude_views:
+            im_rend_path = osp.join(rend_path, im_name_out)
+            if osp.exists(im_rend_path) and im_name_id not in exclude_views:
                 if eval_views is not None and im_name_id not in eval_views:
                     continue
                 gt = imageio.imread(im_path).astype(np.float32)[..., :3] / 255.0
@@ -257,8 +259,8 @@ def run_reduce():
 
     all_objs = []
     objs = [x for x in os.listdir(render_root)]
-    objs = [os.path.join(render_root, x) for x in objs if x[0] != '_']
-    objs = [x for x in objs if os.path.isdir(x)]
+    objs = [osp.join(render_root, x) for x in objs if x[0] != '_']
+    objs = [x for x in objs if osp.isdir(x)]
     if args.dtu_sort:
         objs = sorted(objs, key=lambda x: int(x[x.rindex('/') + 5:]))
     else:
@@ -269,7 +271,7 @@ def run_reduce():
 
     METRIC_NAMES = ['psnr', 'ssim', 'lpips']
 
-    out_metrics_path = os.path.join(render_root, 'all_metrics.txt')
+    out_metrics_path = osp.join(render_root, 'all_metrics.txt')
 
     if args.multicat:
         cat_sz = {}
@@ -283,12 +285,12 @@ def run_reduce():
                 all_metrics[cat + '.' + name] = 0.0
         all_metrics[name] = 0.0
 
-    for obj_root in tqdm.tqdm(all_objs):
-        metrics_path = os.path.join(obj_root, 'metrics.txt')
+    for obj_root in tqdm(all_objs):
+        metrics_path = osp.join(obj_root, 'metrics.txt')
         with open(metrics_path, 'r') as f:
             metrics = [line.split() for line in f.readlines()]
         if args.multicat:
-            cat_name = os.path.basename(obj_root).split('_')[0]
+            cat_name = osp.basename(obj_root).split('_')[0]
             cat_sz[cat_name] += 1
             for metric, val in metrics:
                 all_metrics[cat_name + '.' + metric] += float(val)
