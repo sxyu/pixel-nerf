@@ -138,7 +138,7 @@ All evaluation code is in `eval/` directory.
 The full, parallelized evaluation code is in `eval/eval.py`.
 
 ## Approximate Evaluation
-The full evaluation can be extremely slow (taking many days).
+The full evaluation can be extremely slow (taking many days), especially for the SRN dataset.
 Therefore we also provide `eval_approx.py` for *approximate* evaluation.
 
 - Example `python eval/eval_approx.py -D <srn_data>/cars -n srn_car -c conf/exp/srn.conf`
@@ -161,22 +161,22 @@ Renderings and progress will be saved to the output directory, specified by `-O 
 
 ### ShapeNet
 
-- Category-agnostic eval `python eval/eval.py -D <path>/NMR_Dataset -n sn64 -c conf/exp/sn64.conf -L viewlist/src_dvr.txt --multicat -O eval_sn64`
-- Unseen category eval `python eval/eval.py -D <path>/NMR_Dataset -n sn64_unseen -c conf/exp/sn64_unseen.conf -L viewlist/src_gen.txt --multicat -O eval_sn64_unseen`
+- Category-agnostic eval `python eval/eval.py -D <path>/NMR_Dataset -n sn64 -c conf/exp/sn64.conf -L viewlist/src_dvr.txt --multicat -O eval_out/sn64`
+- Unseen category eval `python eval/eval.py -D <path>/NMR_Dataset -n sn64_unseen -c conf/exp/sn64_unseen.conf -L viewlist/src_gen.txt --multicat -O eval_out/sn64_unseen`
 
 ### SRN ShapeNet
 
-- SRN car 1-view eval `python eval/eval.py -D <srn_data>/cars -n srn_car -c conf/exp/srn.conf -P '64' -O srn_car_1v`
-- SRN car 2-view eval `python eval/eval.py -D <srn_data>/cars -n srn_car -c conf/exp/srn.conf -P '64 104' -O srn_car_2v`
+- SRN car 1-view eval `python eval/eval.py -D <srn_data>/cars -n srn_car -c conf/exp/srn.conf -P '64' -O eval_out/srn_car_1v`
+- SRN car 2-view eval `python eval/eval.py -D <srn_data>/cars -n srn_car -c conf/exp/srn.conf -P '64 104' -O eval_out/srn_car_2v`
 
 The command for chair is analogous (replace car with chair). The input views 64, 104 are taken from SRN.
 Our method is by no means restricted to using such views.
 
 ### DTU
-- 1-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '25' -O dtu_1v`
-- 3-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '22 25 28' -O dtu_3v`
-- 6-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '22 25 28 40 44 48' -O dtu_6v`
-- 9-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '22 25 28 40 44 48 0 8 13' -O dtu_9v`
+- 1-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '25' -O eval_out/dtu_1v`
+- 3-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '22 25 28' -O eval_out/dtu_3v`
+- 6-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '22 25 28 40 44 48' -O eval_out/dtu_6v`
+- 9-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '22 25 28 40 44 48 0 8 13' -O eval_out/dtu_9v`
 
 In training, we always provide 3-views, so the improvement with more views is limited.
 
@@ -184,12 +184,14 @@ In training, we always provide 3-views, so the improvement with more views is li
 
 The above computes PSNR and SSIM without quantization. The final metrics we report in the paper
 use the rendered images saved to disk, and also includes LPIPS + category breakdown.
-To do so run the following command:
-(For ShapeNet 64 experiment)
+To do so run the `eval/calc_metrics.py`, as in the following examples
 
-`python eval/calc_metrics.py -D /home/group/pixelnerf_data/NMR_Dataset -O eval_sn64 -F dvr --list_name 'softras_test' --multicat --gpu_id=<GPU>`
+- NMR ShapeNet experiment: `python eval/calc_metrics.py -D <data dir>/NMR_Dataset -O eval_out/sn64 -F dvr --list_name 'softras_test' --multicat --gpu_id=<GPU>`
+- SRN car 2-view: `python eval/calc_metrics.py -D <srn data dir>/cars -O eval_out/srn_car_2v -F srn --gpu_id=<GPU>` (warning: untested after changes)
+- DTU: `python eval/calc_metrics.py -D <data dir>/rs_dtu_4/DTU -O eval_out/dtu_3v -F dvr --list_name 'new_val' --exclude_dtu_bad --dtu_sort`
 
-Adjust -O according to the -O flag of the eval.py command. For SRN experiment, set `-F srn` and remove `--list_name 'softras_test'` , `--multicat`
+Adjust -O according to the -O flag of the eval.py command.
+(Note: Currently this script has an ugly standalone argument parser.)
 This should print a metric summary like the following
 ```
 psnr 26.799268696042386
