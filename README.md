@@ -10,6 +10,17 @@ arXiv: http://arxiv.org/abs/2012.02190
 This is a *temporary* code repository for our paper, pixelNeRF, pending final release.
 The official repository shall be <https://github.com/sxyu/pixel-nerf>.
 
+# Environment setup
+
+To start, we prefer creating the environment using conda:
+```sh
+conda env create -f environment.yml
+conda activate pixelnerf
+```
+Please make sure you have up-to-date NVIDIA drivers supporting CUDA 10.2 at least.
+
+Alternatively use `pip -r requirements.txt`.
+
 # Getting the data
 
 - For the main ShapeNet experiments, we use the ShapeNet 64x64 dataset from NMR

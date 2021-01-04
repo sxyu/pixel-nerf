@@ -299,7 +299,7 @@ class PixelNeRFNet(torch.nn.Module):
         elif not opt_init:
             warnings.warn(("WARNING: {} does not exist, not loaded!! Model will be re-initialized.\n" +
                     "If you are trying to load a pretrained model, STOP since it's not in the right place. " +
-                    "If training, did you forget to pass --resume?").format(
+                    "If training, unless you are startin a new experiment, please remember to pass --resume.").format(
                         model_path))
 
     def save_weights(self, args, opt_init=False):
