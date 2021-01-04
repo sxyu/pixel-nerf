@@ -167,6 +167,13 @@ In training, we always provide 3-views, so the improvement with more views is li
 Training code is in `train/` directory.
 Check out `train/train.py`. More information to come.
 
+- Example for training to DTU: `python train/train.py -n dtu_exp -c conf/dtu.conf -D <data dir>/rs_dtu_4 -F dvr_dtu -V 3 --gpu_id=<GPU> --resume`
+
+Additional flags
+- `--resume` to resume from checkpoint, if available
+- `-V <number>` to specify number of views.
+    - `-V 'numbers separated by space'` to use random number of views per batch. This does not work so well in our experience but we use it for SRN experiment.
+
 # BibTeX
 
 ```

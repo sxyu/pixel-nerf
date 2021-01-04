@@ -18,7 +18,7 @@ import torch
 
 
 def extra_args(parser):
-    parser.add_argument("--batch_size", "-B", type=int, default=16, help="Object batch size ('SB')")
+    parser.add_argument("--batch_size", "-B", type=int, default=4, help="Object batch size ('SB')")
     parser.add_argument(
         "--nviews",
         "-V",
@@ -34,6 +34,7 @@ def extra_args(parser):
         help="Force renderer to use a black background.",
     )
 
+    parser.add_argument("--no_bbox_step", type=int, default=1000, help="Step to stop using bbox sampling")
     parser.add_argument("--fixed_test", action="store_true", default=None,
             help="Freeze encoder weights and only train MLP")
     return parser
@@ -107,7 +108,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
         all_focals = data["focal"]  # (SB)
         all_c = data.get("c")  # (SB)
 
-        if is_train:
+        if is_train and global_step > args.no_bbox_step:
             all_bboxes = None
 
         all_rgb_gt = []
