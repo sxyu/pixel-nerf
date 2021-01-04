@@ -49,11 +49,12 @@ Extract this to `<project dir>/checkpoints/`, so that `<project dir>/checkpoints
 1. Download NMR ShapeNet renderings (see Datasets section, 1st link)
 2. Download the pretrained shapenet 64 models
 3. Run using 
-    - `python eval/gen_video.py  -n sn64 -c conf/default_mv.conf --gpu_id <GPU> --split test -P '22 25 28'  -D <data_root>/rs_dtu_4 -F dvr -S 0 --ray_batch_size=20000`
+    - `python eval/gen_video.py  -n sn64 -c conf/sn64.conf --gpu_id <GPU> --split test -P '2'  -D <data_root>/NMR_Dataset -F dvr -S 0 --ray_batch_size=20000`
     - For unseen category generalization:
-      `python eval/gen_video.py  -n sn64_unseen -c conf/default_mv.conf --gpu_id=<GPU> --split test -P '22 25 28'  -D <data_root>/rs_dtu_4 -F dvr_gen -S 0 --ray_batch_size=20000`
+      `python eval/gen_video.py  -n sn64_unseen -c conf/sn64.conf --gpu_id=<GPU> --split test -P '2'  -D <data_root>/NMR_Dataset -F dvr_gen -S 0 --ray_batch_size=20000`
 
 Replace `<GPU>` with desired GPU id.  Replace `-S 0` with `-S <number>` to run on a different ShapeNet object id.
+Replace `-P '2'` with `-P '<number>'` to use a different input view.
 Replace `--split test` with `--split train | val` to use different split.
 Adjust `--ray_batch_size` if running out of memory.
 
@@ -123,7 +124,7 @@ The full, parallelized evaluation code is in `eval/eval.py`.
 The full evaluation can be extremely slow (taking many days).
 Therefore we also provide `eval_approx.py` for *approximate* evaluation.
 
-- Example `python eval/eval_approx.py -F srn -D <srn_data>/cars -n srn_car`
+- Example `python eval/eval_approx.py -F srn -D <srn_data>/cars -n srn_car -c conf/default_mv.conf`
 
 Add `--seed <number>` to try a different random seed.
 
@@ -139,22 +140,22 @@ a set of fixed input views. `-L ` should point to a viewlist file (viewlist/) wh
 
 ### ShapeNet
 
-- Category-agnostic eval `python eval/eval.py -F dvr -D <path>/NMR_Dataset -n sn64 -P '64' -L viewlist/src_dvr.txt --multicat -O eval_sn64`
-- Unseen category eval `python eval/eval.py -F dvr_gen -D <path>/NMR_Dataset -n sn64_unseen -L viewlist/src_gen.txt --multicat -O eval_sn64_unseen`
+- Category-agnostic eval `python eval/eval.py -F dvr -D <path>/NMR_Dataset -n sn64 -c conf/sn64.conf -L viewlist/src_dvr.txt --multicat -O eval_sn64`
+- Unseen category eval `python eval/eval.py -F dvr_gen -D <path>/NMR_Dataset -n sn64_unseen -c conf/sn64.conf -L viewlist/src_gen.txt --multicat -O eval_sn64_unseen`
 
 ### SRN ShapeNet
 
-- SRN car 1-view eval `python eval/eval.py -F srn -D <srn_data>/cars -n srn_car -P '64' -O srn_car_1v`
-- SRN car 2-view eval `python eval/eval.py -F srn -D <srn_data>/cars -n srn_car -P '64 104' -O srn_car_2v`
+- SRN car 1-view eval `python eval/eval.py -F srn -D <srn_data>/cars -n srn_car -c conf/default_mv.conf -P '64' -O srn_car_1v`
+- SRN car 2-view eval `python eval/eval.py -F srn -D <srn_data>/cars -n srn_car -c conf/default_mv.conf -P '64 104' -O srn_car_2v`
 
 The command for chair is analogous (replace car with chair). The input views 64, 104 are taken from SRN.
 Our method is by no means restricted to using such views.
 
 ### DTU
-- 1-view `python eval/eval.py -F dvr_dtu -D <data>/rs_dtu_4 -n dtu -P '25' -O dtu_1v`
-- 3-view `python eval/eval.py -F dvr_dtu -D <data>/rs_dtu_4 -n dtu -P '22 25 28' -O dtu_3v`
-- 6-view `python eval/eval.py -F dvr_dtu -D <data>/rs_dtu_4 -n dtu -P '22 25 28 40 44 48' -O dtu_6v`
-- 9-view `python eval/eval.py -F dvr_dtu -D <data>/rs_dtu_4 -n dtu -P '22 25 28 40 44 48 0 8 13' -O dtu_9v`
+- 1-view `python eval/eval.py -F dvr_dtu -D <data>/rs_dtu_4 -n dtu -c conf/dtu.conf -P '25' -O dtu_1v`
+- 3-view `python eval/eval.py -F dvr_dtu -D <data>/rs_dtu_4 -n dtu -c conf/dtu.conf -P '22 25 28' -O dtu_3v`
+- 6-view `python eval/eval.py -F dvr_dtu -D <data>/rs_dtu_4 -n dtu -c conf/dtu.conf -P '22 25 28 40 44 48' -O dtu_6v`
+- 9-view `python eval/eval.py -F dvr_dtu -D <data>/rs_dtu_4 -n dtu -c conf/dtu.conf -P '22 25 28 40 44 48 0 8 13' -O dtu_9v`
 
 In training, we always provide 3-views, so the improvement with more views is limited.
 
