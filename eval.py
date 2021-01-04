@@ -34,7 +34,7 @@ def extra_args(parser):
         "-P",
         type=str,
         default="64",
-        help="Source view(s) in image, or path to viewlist file",
+        help="Source view(s) for each object. Alternatively, specify -L to viewlist file and leave this blank.",
     )
     parser.add_argument(
         "--eval_view_list", type=str, default=None, help="Path to eval view list"

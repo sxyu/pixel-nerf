@@ -103,24 +103,60 @@ Please refer the the following table
 
 | Name                       | expname -n | config -c            | data format -F | Data file                               | data dir -D         |
 |----------------------------|------------|----------------------|----------------|-----------------------------------------|---------------------|
-| ShapeNet category-agnostic | sn64       | conf/sn64.conf       | dvr            | NMR_Dataset.zip (from AWS)              | <path>/NMR_Dataset  |
-| ShapeNet unseen category   | sn64_gen   | conf/sn64.conf       | dvr_gen        | NMR_Dataset.zip (from AWS) + genlist.py | <path> /NMR_Dataset |
-| SRN chairs                 | srn_chair  | conf/default_mv.conf | srn            | srn_chairs.zip                          | <path>/chairs       |
-| SRN cars                   | srn_car    | conf/default_mv.conf | srn            | srn_cars.zip                            | <path>/cars         |
-| DTU                        | dtu        | conf/dtu.conf        | dvr_dtu        | dtu_dataset.zip                         | <path>/rs_dtu_4     |
-| Two chairs                 | TBA        | TBA                  | multi_obj      | multi_chair_*.zip                       | <path>              |
+| ShapeNet category-agnostic | sn64       | conf/sn64.conf       | dvr            | NMR_Dataset.zip (from AWS)              | path/NMR_Dataset  |
+| ShapeNet unseen category   | sn64_unseen   | conf/sn64.conf       | dvr_gen        | NMR_Dataset.zip (from AWS) + genlist.py | path/NMR_Dataset |
+| SRN chairs                 | srn_chair  | conf/default_mv.conf | srn            | srn_chairs.zip                          | path/chairs       |
+| SRN cars                   | srn_car    | conf/default_mv.conf | srn            | srn_cars.zip                            | path/cars         |
+| DTU                        | dtu        | conf/dtu.conf        | dvr_dtu        | dtu_dataset.zip                         | path/rs_dtu_4     |
+| Two chairs                 | TBA        | TBA                  | multi_obj      | multi_chair_*.zip                       | path              |
 
 
 # Quantitative evaluation instructions
 
-The full, parallelized evaluation code is in `eval.py`. Note that this can be extremely slow.
+The full, parallelized evaluation code is in `eval.py`.
+
+## Approximate Evaluation
+The full evaluation can be extremely slow (taking many days).
 Therefore we also provide `eval_approx.py` for *approximate* evaluation.
 
 - Example `python eval_approx.py -F srn -D <srn_data>/cars -n srn_car`
 
+Add `--seed <number>` to try a different random seed.
+
+## Full Metric Evaluation
+
+Here we provide commands for full evaluation with `eval.py`.
+Append `--gpu_id=<GPU1>` after each command, and add `--extra_gpus=GPU ids separated by space` to use multiple GPUs.
+
+Generally, a source (input)-view specification is required, either `-P` or `-L`. `-P 'view1 view2..'` specifies 
+a set of fixed input views. `-L ` should point to a viewlist file (viewlist/) which specifies views to use for each object.
+
+`-O <dirname>` specifies output directory name. Renderings and progress will be saved to this directory.
+
+### ShapeNet
+
+- Category-agnostic eval `python eval.py -F dvr -D <path>/NMR_Dataset -n sn64 -P '64' -L viewlist/src_dvr.txt --multicat -O eval_sn64`
+- Unseen category eval `python eval.py -F dvr_gen -D <path>/NMR_Dataset -n sn64_unseen -L viewlist/src_gen.txt --multicat -O eval_sn64_unseen`
+
+### SRN ShapeNet
+
+- SRN car 1-view eval `python eval.py -F srn -D <srn_data>/cars -n srn_car -P '64' -O srn_car_1v`
+- SRN car 2-view eval `python eval.py -F srn -D <srn_data>/cars -n srn_car -P '64 104' -O srn_car_2v`
+
+The command for chair is analogous (replace car with chair). The input views 64, 104 are taken from SRN.
+Our method is by no means restricted to using such views.
+
+### DTU
+- 1-view `python eval.py -F dvr_dtu -D <data>/rs_dtu_4 -n dtu -P '25' -O dtu_1v`
+- 3-view `python eval.py -F dvr_dtu -D <data>/rs_dtu_4 -n dtu -P '22 25 28' -O dtu_3v`
+- 6-view `python eval.py -F dvr_dtu -D <data>/rs_dtu_4 -n dtu -P '22 25 28 40 44 48' -O dtu_6v`
+- 9-view `python eval.py -F dvr_dtu -D <data>/rs_dtu_4 -n dtu -P '22 25 28 40 44 48 0 8 13' -O dtu_9v`
+
+In training, we always provide 3-views, so the improvement with more views is limited.
+
 # Training instructions
 
-Check out `train/train.py`
+Check out `train/train.py`. More information to come.
 
 # BibTeX
 
