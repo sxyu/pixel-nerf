@@ -55,15 +55,13 @@ def batched_index_select_nd_last(t, inds):
     return out
 
 
-def repeat_interleave(input, repeats, dim):
+def repeat_interleave(input, repeats, dim=0):
     """
-    Repeat interleave, does same thing as torch.repeat_interleave but faster.
+    Repeat interleave along axis 0
     torch.repeat_interleave is currently very slow
     https://github.com/pytorch/pytorch/issues/31980
     """
-    if dim >= 0:
-        dim += 1
-    output = input.unsqueeze(dim).expand(-1, repeats, *input.shape[1:])
+    output = input.unsqueeze(1).expand(-1, repeats, *input.shape[1:])
     return output.reshape(-1, *input.shape[1:])
 
 

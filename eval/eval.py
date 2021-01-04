@@ -147,6 +147,10 @@ class RenderWrapper(torch.nn.Module):
                 eval_batch_size=args.ray_batch_size).to(device=device)
 
     def forward(self, x):
+        if x.shape[0] == 0:
+            return (torch.zeros(0, 3, device=x.device),
+                    torch.zeros(0, device=x.device))
+            
         outputs = self.renderer(self.net, x)
         if self.renderer.using_fine:
             rgb = outputs.fine.rgb
@@ -195,6 +199,7 @@ if args.eval_view_list is not None:
     target_view_mask[eval_views] = 1
 else:
     target_view_mask = torch.ones(NV, dtype=torch.bool)
+target_view_mask_init = target_view_mask
 
 all_rays = None
 pri_poses = None
@@ -254,13 +259,15 @@ with torch.no_grad():
                 focal = torch.tensor(focal, dtype=torch.float32)
             focal = focal[None]
 
-            c = data.get("c")[0]
+            c = data.get("c")
             if c is not None:
-                c = c.to(device=device).unsqueeze(0)
+                c = c[0].to(device=device).unsqueeze(0)
 
             poses = data["poses"][0]  # (NV, 4, 4)
             pri_poses = poses[src_view_mask]  # (NS, 4, 4)
             pri_poses = pri_poses.to(device=device)
+
+            target_view_mask = target_view_mask_init.clone()
             if not args.include_src:
                 target_view_mask *= ~src_view_mask
 

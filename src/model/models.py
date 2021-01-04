@@ -163,7 +163,7 @@ class PixelNeRFNet(torch.nn.Module):
             NS = self.num_views_per_obj
 
             # Transform query points into the camera spaces of the input views
-            xyz = repeat_interleave(xyz, NS, dim=0)  # (SB*NS, B, 3)
+            xyz = repeat_interleave(xyz, NS)  # (SB*NS, B, 3)
             xyz_rot = torch.matmul(self.poses[:, None, :3, :3], xyz.unsqueeze(-1))[
                 ..., 0
             ]
@@ -190,7 +190,7 @@ class PixelNeRFNet(torch.nn.Module):
                     # Viewdirs to input view space
                     viewdirs = viewdirs.reshape(SB, B, 3, 1)
                     viewdirs = repeat_interleave(
-                        viewdirs, NS, dim=0
+                        viewdirs, NS
                     )  # (SB*NS, B, 3, 1)
                     viewdirs = torch.matmul(
                         self.poses[:, None, :3, :3], viewdirs
@@ -210,10 +210,10 @@ class PixelNeRFNet(torch.nn.Module):
                 # Grab encoder's latent code.
                 uv = -xyz[:, :, :2] / xyz[:, :, 2:]  # (SB, B, 2)
                 uv *= repeat_interleave(
-                    self.focal.unsqueeze(1), NS if self.focal.shape[0] > 1 else 1, dim=0
+                    self.focal.unsqueeze(1), NS if self.focal.shape[0] > 1 else 1
                 )
                 uv += repeat_interleave(
-                    self.c.unsqueeze(1), NS if self.c.shape[0] > 1 else 1, dim=0
+                    self.c.unsqueeze(1), NS if self.c.shape[0] > 1 else 1
                 )  # (SB*NS, B, 2)
                 latent = self.encoder.index(
                     uv, None, self.image_shape
@@ -236,7 +236,7 @@ class PixelNeRFNet(torch.nn.Module):
                 global_latent = self.global_encoder.latent
                 assert mlp_input.shape[0] % global_latent.shape[0] == 0
                 num_repeats = mlp_input.shape[0] // global_latent.shape[0]
-                global_latent = repeat_interleave(global_latent, num_repeats, 0)
+                global_latent = repeat_interleave(global_latent, num_repeats)
                 mlp_input = torch.cat((global_latent, mlp_input), dim=-1)
 
             # Camera frustum culling stuff, currently disabled
