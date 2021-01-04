@@ -132,9 +132,10 @@ Add `--seed <number>` to try a different random seed.
 
 Here we provide commands for full evaluation with `eval.py`.
 Append `--gpu_id=<GPU1>` after each command, and add `--extra_gpus=GPU ids separated by space` to use multiple GPUs.
+Resume-capability is built-in, and you can simply run the command again to resume if the process is terminated.
 
-Generally, a source (input)-view specification is required, either `-P` or `-L`. `-P 'view1 view2..'` specifies 
-a set of fixed input views. `-L ` should point to a viewlist file (viewlist/) which specifies views to use for each object.
+In all cases, a source-view specification is required. This can be either `-P` or `-L`. `-P 'view1 view2..'` specifies 
+a set of fixed input views. In contrast, `-L ` should point to a viewlist file (viewlist/) which specifies views to use for each object.
 
 `-O <dirname>` specifies output directory name. Renderings and progress will be saved to this directory.
 

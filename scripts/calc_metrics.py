@@ -1,7 +1,8 @@
 """
 Compute metrics on rendered images (after eval.py).
-This is the 'map' part and only computes per-object metrics.
-Need to run calc_reduce.py after to get the overall results.
+First computes per-object metric then reduces them. If --multicat is used
+then also summarized per-categority metrics. Use --reduce_only to skip the
+per-object computation step.
 
 Note eval.py already outputs PSNR/SSIM.
 This also computes LPIPS and is useful for double-checking metric is correct.
@@ -10,7 +11,6 @@ This also computes LPIPS and is useful for double-checking metric is correct.
 import os
 import argparse
 import skimage.measure
-from concurrent.futures import ProcessPoolExecutor
 from tqdm import tqdm
 import warnings
 import lpips
@@ -41,13 +41,6 @@ parser.add_argument(
     type=str,
     default="softras_test",
     help="Filter list prefix for DVR",
-)
-parser.add_argument(
-    "-j",
-    "--num_workers",
-    type=int,
-    default=1,
-    help="number of processes to parallelize with",
 )
 parser.add_argument(
     "--gpu_id",
@@ -82,6 +75,18 @@ parser.add_argument(
     default=32,
     help="Batch size for LPIPS",
 )
+
+parser.add_argument(
+    "--reduce_only", "-R",
+    action='store_true',
+    help="skip the map (per-obj metric computation)",
+)
+parser.add_argument(
+    "--metadata", type=str, default="metadata.yaml",
+    help="Path to dataset metadata under datadir, used for getting category names if --multicat"
+)
+parser.add_argument("--dtu_sort", action="store_true",
+        help="Sort using DTU scene order instead of lex")
 args = parser.parse_args()
 
 
@@ -102,154 +107,231 @@ else:
 data_root = args.datadir
 render_root = args.output
 
-if args.multicat:
-    cats = os.listdir(data_root)
+def run_map():
+    if args.multicat:
+        cats = os.listdir(data_root)
 
-    def fmt_obj_name(c, x):
-        return c + '_' + x
-else:
-    cats = ['.']
-
-    def fmt_obj_name(c, x):
-        return x
-
-use_exclude_lut = len(args.viewlist) > 0
-if use_exclude_lut:
-    print('Excluding views from list', args.viewlist)
-    with open(args.viewlist, 'r') as f:
-        tmp = [x.strip().split() for x in f.readlines()]
-    exclude_lut = {x[0] + '/' + x[1]: torch.tensor(
-        list(map(int, x[2:])), dtype=torch.long) for x in tmp}
-base_exclude_views = list(map(int, args.primary.split()))
-if args.exclude_dtu_bad:
-    base_exclude_views.extend([3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 36, 37, 38, 39])
-
-if args.eval_view_list is not None:
-    with open(args.eval_view_list, "r") as f:
-        eval_views = list(map(int, f.readline().split()))
-        print("Only using views", eval_views)
-else:
-    eval_views = None
-
-all_objs = []
-
-print("CATEGORICAL SUMMARY")
-total_objs = 0
-
-for cat in cats:
-    cat_root = os.path.join(data_root, cat)
-    if not os.path.isdir(cat_root):
-        continue
-
-    objs = sorted([x for x in os.listdir(cat_root)])
-
-    if len(list_name) > 0:
-        list_path = os.path.join(cat_root, list_name)
-        with open(list_path, 'r') as f:
-            split = set([x.strip() for x in f.readlines()])
-        objs = [x for x in objs if x in split]
-
-    objs_rend = [os.path.join(render_root, fmt_obj_name(cat, x)) for x in objs]
-
-    objs = [os.path.join(cat_root, x) for x in objs]
-    objs = [x for x in objs if os.path.isdir(x)]
-
-    objs = list(zip(objs, objs_rend))
-    objs_avail = [x for x in objs if os.path.exists(x[1])]
-    print(cat, 'TOTAL', len(objs), 'AVAILABLE', len(objs_avail))
-    #  assert len(objs) == len(objs_avail)
-    total_objs += len(objs)
-    all_objs.extend(objs_avail)
-print(">>> USING", len(all_objs), 'OF', total_objs, 'OBJECTS')
-
-
-cuda = 'cuda:' + str(args.gpu_id)
-lpips_vgg = lpips.LPIPS(net='vgg').to(device=cuda)
-
-
-def get_metrics(rgb, gt):
-    ssim = skimage.measure.compare_ssim(
-        rgb, gt, multichannel=True, data_range=1
-    )
-    psnr = skimage.measure.compare_psnr(
-        rgb, gt, data_range=1
-    )
-    return psnr, ssim
-
-
-def isimage(path):
-    ext = os.path.splitext(path)[1]
-    return ext == '.jpg' or ext == '.png'
-
-
-def process_obj(path, rend_path):
-    if len(img_dir_name) > 0:
-        im_root = os.path.join(path, img_dir_name)
+        def fmt_obj_name(c, x):
+            return c + '_' + x
     else:
-        im_root = path
-    out_path = os.path.join(rend_path, 'metrics.txt')
-    if os.path.exists(out_path) and not args.overwrite:
-        return
-    ims = [x for x in sorted(os.listdir(im_root)) if isimage(x)]
-    psnr_avg = 0.0
-    ssim_avg = 0.0
-    gts = []
-    preds = []
-    num_ims = 0
+        cats = ['.']
+
+        def fmt_obj_name(c, x):
+            return x
+
+    use_exclude_lut = len(args.viewlist) > 0
     if use_exclude_lut:
-        lut_key = os.path.basename(rend_path).replace('_', '/')
-        exclude_views = exclude_lut[lut_key]
+        print('Excluding views from list', args.viewlist)
+        with open(args.viewlist, 'r') as f:
+            tmp = [x.strip().split() for x in f.readlines()]
+        exclude_lut = {x[0] + '/' + x[1]: torch.tensor(
+            list(map(int, x[2:])), dtype=torch.long) for x in tmp}
+    base_exclude_views = list(map(int, args.primary.split()))
+    if args.exclude_dtu_bad:
+        base_exclude_views.extend([3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 36, 37, 38, 39])
+
+    if args.eval_view_list is not None:
+        with open(args.eval_view_list, "r") as f:
+            eval_views = list(map(int, f.readline().split()))
+            print("Only using views", eval_views)
     else:
-        exclude_views = []
-    exclude_views.extend(base_exclude_views)
+        eval_views = None
 
-    for im_name in ims:
-        im_path = os.path.join(im_root, im_name)
-        im_name_id = int(os.path.splitext(im_name)[0])
-        im_name_out = '{:06}.png'.format(im_name_id)
-        im_rend_path = os.path.join(rend_path, im_name_out)
-        if os.path.exists(im_rend_path) and im_name_id not in exclude_views:
-            if eval_views is not None and im_name_id not in eval_views:
-                continue
-            gt = imageio.imread(im_path).astype(np.float32)[..., :3] / 255.0
-            pred = imageio.imread(im_rend_path).astype(np.float32) / 255.0
+    all_objs = []
 
-            psnr, ssim = get_metrics(pred, gt)
-            psnr_avg += psnr
-            ssim_avg += ssim
-            gts.append(torch.from_numpy(gt).permute(2, 0, 1) * 2.0 - 1.0)
-            preds.append(torch.from_numpy(pred).permute(2, 0, 1) * 2.0 - 1.0)
-            num_ims += 1
-    gts = torch.stack(gts)
-    preds = torch.stack(preds)
+    print("CATEGORICAL SUMMARY")
+    total_objs = 0
 
-    lpips_all = []
-    preds_spl = torch.split(preds, args.lpips_batch_size, dim=0)
-    gts_spl = torch.split(gts, args.lpips_batch_size, dim=0)
-    with torch.no_grad():
-        for predi, gti in zip(preds_spl, gts_spl):
-            lpips_i = lpips_vgg(predi.to(device=cuda), gti.to(device=cuda))
-            lpips_all.append(lpips_i)
-        lpips = torch.cat(lpips_all)
-    lpips = lpips.mean().item()
-    psnr_avg /= num_ims
-    ssim_avg /= num_ims
-    out_txt = 'psnr {}\nssim {}\nlpips {}'.format(psnr_avg, ssim_avg, lpips)
-    with open(out_path, 'w') as f:
-        f.write(out_txt)
+    for cat in cats:
+        cat_root = os.path.join(data_root, cat)
+        if not os.path.isdir(cat_root):
+            continue
+
+        objs = sorted([x for x in os.listdir(cat_root)])
+
+        if len(list_name) > 0:
+            list_path = os.path.join(cat_root, list_name)
+            with open(list_path, 'r') as f:
+                split = set([x.strip() for x in f.readlines()])
+            objs = [x for x in objs if x in split]
+
+        objs_rend = [os.path.join(render_root, fmt_obj_name(cat, x)) for x in objs]
+
+        objs = [os.path.join(cat_root, x) for x in objs]
+        objs = [x for x in objs if os.path.isdir(x)]
+
+        objs = list(zip(objs, objs_rend))
+        objs_avail = [x for x in objs if os.path.exists(x[1])]
+        print(cat, 'TOTAL', len(objs), 'AVAILABLE', len(objs_avail))
+        #  assert len(objs) == len(objs_avail)
+        total_objs += len(objs)
+        all_objs.extend(objs_avail)
+    print(">>> USING", len(all_objs), 'OF', total_objs, 'OBJECTS')
 
 
-if args.num_workers == 1:
+    cuda = 'cuda:' + str(args.gpu_id)
+    lpips_vgg = lpips.LPIPS(net='vgg').to(device=cuda)
+
+
+    def get_metrics(rgb, gt):
+        ssim = skimage.measure.compare_ssim(
+            rgb, gt, multichannel=True, data_range=1
+        )
+        psnr = skimage.measure.compare_psnr(
+            rgb, gt, data_range=1
+        )
+        return psnr, ssim
+
+
+    def isimage(path):
+        ext = os.path.splitext(path)[1]
+        return ext == '.jpg' or ext == '.png'
+
+
+    def process_obj(path, rend_path):
+        if len(img_dir_name) > 0:
+            im_root = os.path.join(path, img_dir_name)
+        else:
+            im_root = path
+        out_path = os.path.join(rend_path, 'metrics.txt')
+        if os.path.exists(out_path) and not args.overwrite:
+            return
+        ims = [x for x in sorted(os.listdir(im_root)) if isimage(x)]
+        psnr_avg = 0.0
+        ssim_avg = 0.0
+        gts = []
+        preds = []
+        num_ims = 0
+        if use_exclude_lut:
+            lut_key = os.path.basename(rend_path).replace('_', '/')
+            exclude_views = exclude_lut[lut_key]
+        else:
+            exclude_views = []
+        exclude_views.extend(base_exclude_views)
+
+        for im_name in ims:
+            im_path = os.path.join(im_root, im_name)
+            im_name_id = int(os.path.splitext(im_name)[0])
+            im_name_out = '{:06}.png'.format(im_name_id)
+            im_rend_path = os.path.join(rend_path, im_name_out)
+            if os.path.exists(im_rend_path) and im_name_id not in exclude_views:
+                if eval_views is not None and im_name_id not in eval_views:
+                    continue
+                gt = imageio.imread(im_path).astype(np.float32)[..., :3] / 255.0
+                pred = imageio.imread(im_rend_path).astype(np.float32) / 255.0
+
+                psnr, ssim = get_metrics(pred, gt)
+                psnr_avg += psnr
+                ssim_avg += ssim
+                gts.append(torch.from_numpy(gt).permute(2, 0, 1) * 2.0 - 1.0)
+                preds.append(torch.from_numpy(pred).permute(2, 0, 1) * 2.0 - 1.0)
+                num_ims += 1
+        gts = torch.stack(gts)
+        preds = torch.stack(preds)
+
+        lpips_all = []
+        preds_spl = torch.split(preds, args.lpips_batch_size, dim=0)
+        gts_spl = torch.split(gts, args.lpips_batch_size, dim=0)
+        with torch.no_grad():
+            for predi, gti in zip(preds_spl, gts_spl):
+                lpips_i = lpips_vgg(predi.to(device=cuda), gti.to(device=cuda))
+                lpips_all.append(lpips_i)
+            lpips = torch.cat(lpips_all)
+        lpips = lpips.mean().item()
+        psnr_avg /= num_ims
+        ssim_avg /= num_ims
+        out_txt = 'psnr {}\nssim {}\nlpips {}'.format(psnr_avg, ssim_avg, lpips)
+        with open(out_path, 'w') as f:
+            f.write(out_txt)
+
+
     for obj_path, obj_rend_path in tqdm(all_objs):
         process_obj(obj_path, obj_rend_path)
-else:
-    futures = []
-    progress = tqdm(total=len(all_objs))
-    with ProcessPoolExecutor(max_workers=args.num_workers) as executor:
-        for obj_path, obj_rend_path in all_objs:
-            futures.append(
-                executor.submit(process_obj, obj_path, obj_rend_path)
-            )
-        for future in futures:
-            _ = future.result()
-            progress.update(1)
+
+
+def run_reduce():
+    if args.multicat:
+        meta = json.load(open(osp.join(args.datadir, args.metadata), 'r'))
+        cats = sorted(list(meta.keys()))
+        cat_description = {cat : meta[cat]['name'].split(',')[0] for cat in cats}
+
+    all_objs = []
+    objs = [x for x in os.listdir(render_root)]
+    objs = [os.path.join(render_root, x) for x in objs if x[0] != '_']
+    objs = [x for x in objs if os.path.isdir(x)]
+    if args.dtu_sort:
+        objs = sorted(objs, key=lambda x: int(x[x.rindex('/') + 5:]))
+    else:
+        objs = sorted(objs)
+    all_objs.extend(objs)
+
+    print(">>> PROCESSING", len(all_objs), 'OBJECTS')
+
+    METRIC_NAMES = ['psnr', 'ssim', 'lpips']
+
+    out_metrics_path = os.path.join(render_root, 'all_metrics.txt')
+
+    if args.multicat:
+        cat_sz = {}
+        for cat in cats:
+            cat_sz[cat] = 0
+
+    all_metrics = {}
+    for name in METRIC_NAMES:
+        if args.multicat:
+            for cat in cats:
+                all_metrics[cat + '.' + name] = 0.0
+        all_metrics[name] = 0.0
+
+    for obj_root in tqdm.tqdm(all_objs):
+        metrics_path = os.path.join(obj_root, 'metrics.txt')
+        with open(metrics_path, 'r') as f:
+            metrics = [line.split() for line in f.readlines()]
+        if args.multicat:
+            cat_name = os.path.basename(obj_root).split('_')[0]
+            cat_sz[cat_name] += 1
+            for metric, val in metrics:
+                all_metrics[cat_name + '.' + metric] += float(val)
+        print(obj_root, end=' ')
+        for metric, val in metrics:
+            all_metrics[metric] += float(val)
+            print(val, end=' ')
+        print()
+
+    for name in METRIC_NAMES:
+        if args.multicat:
+            for cat in cats:
+                if cat_sz[cat] > 0:
+                    all_metrics[cat + '.' + name] /= cat_sz[cat]
+        all_metrics[name] /= len(all_objs)
+        print(name, all_metrics[name])
+
+    metrics_txt = []
+    if args.multicat:
+        for cat in cats:
+            if cat_sz[cat] > 0:
+                cat_txt = '{:12s}'.format(cat_description[cat])
+                for name in METRIC_NAMES:
+                    cat_txt += ' {}: {:.6f}'.format(name, all_metrics[cat + '.' + name])
+                cat_txt += ' n_inst: {}'.format(cat_sz[cat])
+                metrics_txt.append(cat_txt)
+
+        total_txt = '---\n{:12s}'.format('total')
+    else:
+        total_txt = ''
+    for name in METRIC_NAMES:
+        total_txt += ' {}: {:.6f}'.format(name, all_metrics[name])
+    metrics_txt.append(total_txt)
+
+    metrics_txt = '\n'.join(metrics_txt)
+    with open(out_metrics_path, 'w') as f:
+        f.write(metrics_txt)
+    print('WROTE', out_metrics_path)
+    print(metrics_txt)
+
+if __name__ == '__main__':
+    if not args.reduce_only:
+        print(">>> Compute")
+        run_map()
+    print(">>> Reduce")
+    run_reduce()
