@@ -124,9 +124,10 @@ class PixelNeRFNet(torch.nn.Module):
             # Vector f: fx = fy = f_i *for view i*
             # Length should match NS (or 1 for broadcast)
             focal = focal.unsqueeze(-1).repeat((1, 2))
-        # Otherwise, can specify as
-        focal[..., 1] *= -1.0
+        else:
+            focal = focal.clone()
         self.focal = focal.float()
+        self.focal[..., 1] *= -1.0
 
         if c is None:
             # Default principal point is center of image

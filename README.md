@@ -59,16 +59,17 @@ Extract this to `<project dir>/checkpoints/`, so that `<project dir>/checkpoints
 
 1. Download NMR ShapeNet renderings (see Datasets section, 1st link)
 2. Run using
-    - `python eval/gen_video.py  -n sn64 -c conf/exp/sn64.conf --gpu_id <GPU> --split test -P '2'  -D <data_root>/NMR_Dataset -S 0 --ray_batch_size=20000`
+    - `python eval/gen_video.py  -n sn64 -c conf/exp/sn64.conf --gpu_id <GPU> --split test -P '2'  -D <data_root>/NMR_Dataset -S 0`
     - For unseen category generalization:
-      `python eval/gen_video.py  -n sn64_unseen -c conf/exp/sn64.conf --gpu_id=<GPU> --split test -P '2'  -D <data_root>/NMR_Dataset -S 0 --ray_batch_size=20000`
+      `python eval/gen_video.py  -n sn64_unseen -c conf/exp/sn64.conf --gpu_id=<GPU> --split test -P '2'  -D <data_root>/NMR_Dataset -S 0`
 
 Replace `<GPU>` with desired GPU id.  Replace `-S 0` with `-S <object_id>` to run on a different ShapeNet object id.
 Replace `-P '2'` with `-P '<number>'` to use a different input view.
-Replace `--split test` with `--split train | val` to use different split.
-Adjust `--ray_batch_size` if running out of memory.
+Replace `--split test` with `--split train | val` to use different data split.
+Append `--ray_batch_size=20000` if running out of memory.
 
-**Result will be at visuals/sn64/videot<object_id>.mp4** or **Result will be at visuals/sn64_unseen/videot<object_id>.mp4**
+**Result will be at** `visuals/sn64/videot<object_id>.mp4` or `visuals/sn64_unseen/videot<object_id>.mp4`.
+The script will also print the path.
 
 
 Pre-generated results for all ShapeNet objects with comparison may be found at <https://www.ocf.berkeley.edu/~sxyu/ZG9yaWF0aA/pixelnerf/cross_v2/>
@@ -78,12 +79,13 @@ Pre-generated results for all ShapeNet objects with comparison may be found at <
 Make sure you have downloaded the pretrained weights above.
 
 1. Download DTU dataset (see Datasets section). Extract to some directory, to get: `<data_root>/rs_dtu_4`
-2. Run using `python eval/gen_video.py  -n dtu -c conf/exp/dtu.conf --gpu_id=<GPU> --split val -P '22 25 28'  -D <data_root>/rs_dtu_4 -S 3  --ray_batch_size=20000 --black --scale 0.25`
+2. Run using `python eval/gen_video.py  -n dtu -c conf/exp/dtu.conf --gpu_id=<GPU> --split val -P '22 25 28'  -D <data_root>/rs_dtu_4 -S 3 --black --scale 0.25`
 
 Replace `<GPU>` with desired GPU id. Replace `-S 3` with `-S <scene_id> to run on a different scene. This is not DTU scene number but 0-14 in the val set.
 Remove `--scale 0.25` to render at full resolution (quite slow).
 
-**Result will be at visuals/dtu/videov<scene_id>.mp4*
+**Result will be at** visuals/dtu/videov<scene_id>.mp4.
+The script will also print the path.
 
 Note that for DTU, I only use train/val sets, where val is used for test. This is due to the very small size of the dataset.
 The model overfits to the train set significantly during training.
@@ -173,10 +175,10 @@ The command for chair is analogous (replace car with chair). The input views 64,
 Our method is by no means restricted to using such views.
 
 ### DTU
-- 1-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '25' -O eval_out/dtu_1v`
-- 3-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '22 25 28' -O eval_out/dtu_3v`
-- 6-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '22 25 28 40 44 48' -O eval_out/dtu_6v`
-- 9-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '22 25 28 40 44 48 0 8 13' -O eval_out/dtu_9v`
+- 1-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '25' -O eval_out/dtu_1v --black`
+- 3-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '22 25 28' -O eval_out/dtu_3v --black`
+- 6-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '22 25 28 40 44 48' -O eval_out/dtu_6v --black`
+- 9-view `python eval/eval.py -D <data>/rs_dtu_4 --split val -n dtu -c conf/exp/dtu.conf -P '22 25 28 40 44 48 0 8 13' -O eval_out/dtu_9v --black`
 
 In training, we always provide 3-views, so the improvement with more views is limited.
 

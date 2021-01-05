@@ -43,7 +43,8 @@ def extra_args(parser):
         "--eval_view_list", type=str, default=None, help="Path to eval view list"
     )
     parser.add_argument("--coarse", action="store_true", help="Coarse network as fine")
-    parser.add_argument("--no_compare_gt", action="store_true")
+    parser.add_argument("--no_compare_gt", action="store_true",
+            help="Skip GT comparison (metric won't be computed) and only render images")
     parser.add_argument(
         "--multicat",
         action="store_true",
@@ -100,7 +101,8 @@ device = util.get_cuda(args.gpu_id)
 
 extra_gpus = list(map(int, args.extra_gpus.split()))
 
-dset = get_split_dataset(args.dataset_format, args.datadir, want_split=args.split)
+dset = get_split_dataset(args.dataset_format, args.datadir,
+        want_split=args.split, training=False)
 data_loader = torch.utils.data.DataLoader(
     dset, batch_size=1, shuffle=False, num_workers=8, pin_memory=False
 )
@@ -199,9 +201,6 @@ else:
 target_view_mask_init = target_view_mask
 
 all_rays = None
-pri_poses = None
-focal = None
-
 rays_spl = []
 
 src_view_mask = None
@@ -261,34 +260,36 @@ with torch.no_grad():
                 c = c[0].to(device=device).unsqueeze(0)
 
             poses = data["poses"][0]  # (NV, 4, 4)
-            pri_poses = poses[src_view_mask]  # (NS, 4, 4)
-            pri_poses = pri_poses.to(device=device)
+            src_poses = poses[src_view_mask].to(device=device)  # (NS, 4, 4)
 
             target_view_mask = target_view_mask_init.clone()
             if not args.include_src:
                 target_view_mask *= ~src_view_mask
 
             novel_view_idxs = target_view_mask.nonzero(as_tuple=False).reshape(-1)
-            poses = poses[target_view_mask]  # (NV-1, 4, 4)
+
+            poses = poses[target_view_mask]  # (NV[-NS], 4, 4)
 
             all_rays = (
-                util.gen_rays(poses.reshape(-1, 4, 4), W, H, focal * args.scale, z_near, z_far, c=c * args.scale if c is not None else None)
+                util.gen_rays(poses.reshape(-1, 4, 4), W, H, focal * args.scale,
+                    z_near, z_far, c=c * args.scale if c is not None else None)
                 .reshape(-1, 8)
                 .to(device=device)
-            )  # ((NV-1)*H*W, 8)
-            rays_spl = torch.split(
-                all_rays, args.ray_batch_size, dim=0
-            )  # Creates views
-            poses = _poses_a = _poses_b = None
+            )  # ((NV[-NS])*H*W, 8)
+
+            poses = None
             focal = focal.to(device=device)
+
+        rays_spl = torch.split(
+            all_rays, args.ray_batch_size, dim=0
+        )  # Creates views
 
         n_gen_views = len(novel_view_idxs)
 
         util.get_module(renderer).net.encode(
             images[src_view_mask].to(device=device).unsqueeze(0),
-            pri_poses.unsqueeze(0),
+            src_poses.unsqueeze(0),
             focal,
-            (z_near, z_far),
             c=c
         )
 

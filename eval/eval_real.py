@@ -1,5 +1,5 @@
 """
-Eval on real image
+Eval on real images from input/*_normalize.png, output to output/
 """
 import sys
 import os
@@ -119,11 +119,10 @@ with torch.no_grad():
         image = T.Resize(in_sz)(image)
         image = image_to_tensor(image).to(device=device)
 
-        util.get_module(net).encode(
+        net.encode(
             image.unsqueeze(0),
             cam_pose.unsqueeze(0),
             focal,
-            (z_near, z_far),
         )
         print("Rendering", args.num_views * H * W, "rays")
         all_rgb_fine = []

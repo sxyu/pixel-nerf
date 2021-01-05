@@ -177,7 +177,6 @@ class PixelNeRFTrainer(trainlib.Trainer):
             src_images,
             src_poses,
             all_focals.to(device=device),
-            (self.z_near, self.z_far),
             c=all_c.to(device=device) if all_c is not None else None,
         )
 
@@ -256,11 +255,10 @@ class PixelNeRFTrainer(trainlib.Trainer):
         with torch.no_grad():
             test_rays = cam_rays[view_dest]  # (H, W, 8)
             test_images = images[views_src]  # (NS, 3, H, W)
-            util.get_module(net).encode(
+            net.encode(
                 test_images.unsqueeze(0),
                 poses[views_src].unsqueeze(0),
                 focal.to(device=device),
-                (self.z_near, self.z_far),
                 c=c.to(device=device) if c is not None else None,
             )
             test_rays = test_rays.reshape(H * W, -1)

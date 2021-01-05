@@ -7,13 +7,15 @@ from .SRNDataset import SRNDataset
 from .data_util import ColorJitterDataset
 
 
-def get_split_dataset(dataset_type, datadir, want_split="all", **kwargs):
+def get_split_dataset(dataset_type, datadir, want_split="all",
+                      training=True, **kwargs):
     """
     Retrieved desired dataset class
     :param dataset_type dataset type name (srn|dvr|dvr_gen, etc)
     :param datadir root directory name for the dataset. For SRN/multi_obj data:
     if data is in dir/cars_train, dir/cars_test, ... then put dir/cars
     :param want_split root directory name for the dataset
+    :param training set to False in eval scripts
     """
     dset_class, train_aug = None, None 
     flags, train_aug_flags = {}, {}
@@ -33,7 +35,8 @@ def get_split_dataset(dataset_type, datadir, want_split="all", **kwargs):
         elif dataset_type == "dvr_dtu":
             # DTU dataset
             flags["list_prefix"] = "new_"
-            flags["max_imgs"] = 49
+            if training:
+                flags["max_imgs"] = 49
             flags["sub_format"] = "dtu"
             flags["scale_focal"] = False
             flags["z_near"] = 0.1

@@ -4,6 +4,8 @@ Evaluates using only 1 random target view per object. You can try different --se
 
 python eval_approx.py --gpu_id=<gpu> -n <expname> -c <conf> -D <datadir> -F <format>
 Add --seed <num> to set random seed
+
+May not work for DTU.
 """
 import sys
 import os
@@ -59,7 +61,8 @@ if args.coarse:
 
 device = util.get_cuda(args.gpu_id)
 
-dset = get_split_dataset(args.dataset_format, args.datadir, want_split=args.split)
+dset = get_split_dataset(args.dataset_format, args.datadir,
+        want_split=args.split, training=False)
 data_loader = torch.utils.data.DataLoader(
     dset, batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=False
 )
@@ -123,7 +126,6 @@ with torch.no_grad():
             pri_images.to(device=device),
             pri_poses.to(device=device),
             focal.to(device=device),
-            (z_near, z_far),
         )
 
         outputs = renderer(net, all_rays.to(device=device))

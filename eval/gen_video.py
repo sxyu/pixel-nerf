@@ -68,7 +68,8 @@ args.resume = True
 device = util.get_cuda(args.gpu_id)
 extra_gpus = list(map(int, args.extra_gpus.split()))
 
-dset = get_split_dataset(args.dataset_format, args.datadir, want_split=args.split)
+dset = get_split_dataset(args.dataset_format, args.datadir,
+        want_split=args.split, training=False)
 
 data = dset[args.subset]
 data_path = data["path"]
