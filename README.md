@@ -94,7 +94,7 @@ Make sure you have downloaded the pretrained weights above.
 1. Download DTU dataset from Google drive folder in Datasets section. Extract to some directory, to get: `<data_root>/rs_dtu_4`
 2. Run using `python eval/gen_video.py  -n dtu --gpu_id=<GPU(s)> --split val -P '22 25 28'  -D <data_root>/rs_dtu_4 -S 3 --scale 0.25`
 
-Replace `<GPU(s)>` with desired GPU id(s). Replace `-S 3` with `-S <scene_id> to run on a different scene. This is not DTU scene number but 0-14 in the val set.
+Replace `<GPU(s)>` with desired GPU id(s). Replace `-S 3` with `-S <scene_id>` to run on a different scene. This is not DTU scene number but 0-14 in the val set.
 Remove `--scale 0.25` to render at full resolution (quite slow).
 
 **Result will be at** visuals/dtu/videov<scene_id>.mp4.
@@ -172,7 +172,8 @@ After running this you should also use `eval/calc_metrics.py`, described in the 
 to obtain final metrics.
 
 Append `--gpu_id=<GPUs>` to specify GPUs, for example `--gpu_id=0` or `--gpu_id='0 1 3'`.
-** It is highly recommended to use multiple GPUs if possible to finish in reasonable time.** We use 4-10 for evaluations as available.
+**It is highly recommended to use multiple GPUs if possible to finish in reasonable time.**
+We use 4-10 for evaluations as available.
 Resume-capability is built-in, and you can simply run the command again to resume if the process is terminated.
 
 In all cases, a source-view specification is required. This can be either `-P` or `-L`. `-P 'view1 view2..'` specifies
