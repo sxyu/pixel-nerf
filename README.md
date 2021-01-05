@@ -75,7 +75,7 @@ The script will also print the path.
 
 Pre-generated results for all ShapeNet objects with comparison may be found at <https://www.ocf.berkeley.edu/~sxyu/ZG9yaWF0aA/pixelnerf/cross_v2/>
 
-### ShapeNet Single-Category (SRN)
+## ShapeNet Single-Category (SRN)
 
 1. Download SRN car (or chair) dataset from Google drive folder in Datasets section.
 Extract to `<srn data dir>/cars_<train | test | val>`
@@ -120,7 +120,7 @@ If the result is not reasonable, PointRend didn't work; please try another imge.
 The Stanford Car dataset contains many example car images:
 <https://ai.stanford.edu/~jkrause/cars/car_dataset.html>.
 Note the normalization heuristic has been slightly modified compared to the paper. There may be some minor differences.
-You can pass `-e -20' to `eval_real.py` to set the elevation higher in the generated video.
+You can pass `-e -20` to `eval_real.py` to set the elevation higher in the generated video.
 
 # Overview of flags
 
