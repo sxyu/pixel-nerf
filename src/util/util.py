@@ -55,15 +55,13 @@ def batched_index_select_nd_last(t, inds):
     return out
 
 
-def repeat_interleave(input, repeats, dim):
+def repeat_interleave(input, repeats, dim=0):
     """
-    Repeat interleave, does same thing as torch.repeat_interleave but faster.
+    Repeat interleave along axis 0
     torch.repeat_interleave is currently very slow
     https://github.com/pytorch/pytorch/issues/31980
     """
-    if dim >= 0:
-        dim += 1
-    output = input.unsqueeze(dim).expand(-1, repeats, *input.shape[1:])
+    output = input.unsqueeze(1).expand(-1, repeats, *input.shape[1:])
     return output.reshape(-1, *input.shape[1:])
 
 
@@ -72,10 +70,7 @@ def get_image_to_tensor_balanced(image_size=0):
     if image_size > 0:
         ops.append(transforms.Resize(image_size))
     ops.extend(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-        ]
+        [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),]
     )
     return transforms.Compose(ops)
 
@@ -283,13 +278,7 @@ def gen_rays(poses, width, height, focal, z_near, z_far, c=None, ndc=False):
 
 def trans_t(t):
     return torch.tensor(
-        [
-            [1, 0, 0, 0],
-            [0, 1, 0, 0],
-            [0, 0, 1, t],
-            [0, 0, 0, 1],
-        ],
-        dtype=torch.float32,
+        [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, t], [0, 0, 0, 1],], dtype=torch.float32,
     )
 
 

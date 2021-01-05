@@ -1,4 +1,10 @@
-import os.path
+import sys
+import os
+
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+)
+
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -23,11 +29,11 @@ def extra_args(parser):
         help="Split of data to use train | val | test",
     )
     parser.add_argument(
-        "--primary",
+        "--source",
         "-P",
         type=str,
         default="64",
-        help="Primary view(s) in image, in increasing order. -1 to do random",
+        help="Source view(s) in image, in increasing order. -1 to do random",
     )
     parser.add_argument(
         "--num_views",
@@ -51,26 +57,21 @@ def extra_args(parser):
         help="Distance of camera from origin, default is average of z_far, z_near of dataset (only for non-DTU)",
     )
     parser.add_argument("--fps", type=int, default=30, help="FPS of video")
-    parser.add_argument(
-        "--black",
-        action="store_true",
-        help="Force renderer to use a black background.",
-    )
-    parser.add_argument("--ray_batch_size", type=int, default=50000)
     return parser
 
 
 args, conf = util.args.parse_args(extra_args)
 args.resume = True
 
-device = util.get_cuda(args.gpu_id)
-extra_gpus = list(map(int, args.extra_gpus.split()))
+device = util.get_cuda(args.gpu_id[0])
 
-dset = get_split_dataset(args.dataset_format, args.datadir, want_split=args.split)
+dset = get_split_dataset(
+    args.dataset_format, args.datadir, want_split=args.split, training=False
+)
 
 data = dset[args.subset]
 data_path = data["path"]
-print(data_path)
+print("Data instance loaded:", data_path)
 
 images = data["images"]  # (NV, 3, H, W)
 
@@ -101,19 +102,14 @@ if args.scale != 1.0:
 
 net = make_model(conf["model"]).to(device=device)
 net.load_weights(args)
-if len(extra_gpus):
-    warnings.warn("Multi GPU not implemented")
 
 renderer = NeRFRenderer.from_conf(
-    conf["renderer"],
-    white_bkgd=not args.black,
-    lindisp=dset.lindisp,
-    eval_batch_size=args.ray_batch_size,
+    conf["renderer"], lindisp=dset.lindisp, eval_batch_size=args.ray_batch_size,
 ).to(device=device)
 
-# Get the distance from camera to origin, for normalization of z when training.
-# NOTE: we DO NOT actually need /camera location at test time.
-# I am using canonical coordinates only for convenience in current implementation.
+render_par = renderer.bind_parallel(net, args.gpu_id, simple_output=True).eval()
+
+# Get the distance from camera to origin
 z_near = dset.z_near
 z_far = dset.z_far
 
@@ -122,7 +118,7 @@ print("Generating rays")
 dtu_format = hasattr(dset, "sub_format") and dset.sub_format == "dtu"
 
 if dtu_format:
-    print("Using DTU format")
+    print("Using DTU camera trajectory")
     # Use hard-coded pose interpolation from IDR for DTU
 
     t_in = np.array([0, 2, 3, 5, 6]).astype(np.float32)
@@ -159,9 +155,10 @@ if dtu_format:
         render_poses.append(new_pose)
     render_poses = torch.cat(render_poses, dim=0)
 else:
+    print("Using default (360 loop) camera trajectory")
     if args.radius == 0.0:
         radius = (z_near + z_far) * 0.5
-        print("Using default camera radius", radius)
+        print("> Using default camera radius", radius)
     else:
         radius = args.radius
 
@@ -187,24 +184,22 @@ render_rays = util.gen_rays(
 
 focal = focal.to(device=device)
 
-primary = torch.tensor(list(map(int, args.primary.split())), dtype=torch.long)
-NS = len(primary)
-random_primary = NS == 1 and primary[0] == -1
-assert not (primary >= NV).any()
+source = torch.tensor(list(map(int, args.source.split())), dtype=torch.long)
+NS = len(source)
+random_source = NS == 1 and source[0] == -1
+assert not (source >= NV).any()
 
-net.eval()
-renderer.eval()
 if renderer.n_coarse < 64:
     # Ensure decent sampling resolution
     renderer.n_coarse = 64
     renderer.n_fine = 128
 
 with torch.no_grad():
-    print("Encoding primary view(s)")
-    if random_primary:
+    print("Encoding source view(s)")
+    if random_source:
         src_view = torch.randint(0, NV, (1,))
     else:
-        src_view = primary
+        src_view = source
 
     net.encode(
         images[src_view].unsqueeze(0),
@@ -218,17 +213,13 @@ with torch.no_grad():
     for rays in tqdm.tqdm(
         torch.split(render_rays.view(-1, 8), args.ray_batch_size, dim=0)
     ):
-        outputs = renderer(net, rays)
-        if renderer.using_fine:
-            all_rgb_fine.append(outputs.fine.rgb)
-        else:
-            all_rgb_fine.append(outputs.coarse.rgb)
+        rgb, _depth = render_par(rays[None])
+        all_rgb_fine.append(rgb[0])
+    _depth = None
     rgb_fine = torch.cat(all_rgb_fine)
     # rgb_fine (V*H*W, 3)
-    # depth_fine (V*H*W)
 
     frames = rgb_fine.view(-1, H, W, 3)
-    #  depth_fine = depth_fine.view(args.num_views, H, W, 1)
 
 print("Writing video")
 vid_name = "{:04}".format(args.subset)
@@ -236,7 +227,7 @@ if args.split == "test":
     vid_name = "t" + vid_name
 elif args.split == "val":
     vid_name = "v" + vid_name
-vid_name += "_v" + "_".join(map(lambda x: "{:03}".format(x), primary))
+vid_name += "_v" + "_".join(map(lambda x: "{:03}".format(x), source))
 vid_path = os.path.join(args.visual_path, args.name, "video" + vid_name + ".mp4")
 viewimg_path = os.path.join(
     args.visual_path, args.name, "video" + vid_name + "_view.jpg"

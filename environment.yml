@@ -1,0 +1,25 @@
+# run: conda env create -f environment.yml
+name: pixelnerf
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - python>=3.8
+  - pip
+  - pip:
+      - pyhocon
+      - opencv-python
+      - dotmap
+      - tensorboard
+      - imageio
+      - imageio-ffmpeg
+      - ipdb
+      - pretrainedmodels
+      - lpips
+  - scipy
+  - numpy
+  - matplotlib
+  - pytorch==1.6.0
+  - torchvision==0.7.0
+  - scikit-image==0.17.2
+  - tqdm

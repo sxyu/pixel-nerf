@@ -1,26 +1,28 @@
+import sys
 import os
+
+
 import argparse
 from pyhocon import ConfigFactory
 
 
 def parse_args(
     callback=None,
-    default_conf="conf/resnet_fine_mv.conf",
+    training=False,
+    default_conf="conf/default_mv.conf",
     default_expname="example",
-    default_num_epochs=10000,
+    default_data_format="dvr",
+    default_num_epochs=10000000,
     default_lr=1e-4,
     default_gamma=1.00,
-    default_datadir="/home/group/data/chairs",
+    default_datadir="data",
+    default_ray_batch_size=50000,
 ):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--conf", "-c", type=str, default=default_conf)
+    parser.add_argument("--conf", "-c", type=str, default=None)
     parser.add_argument("--resume", "-r", action="store_true", help="continue training")
-    parser.add_argument("--gpu_id", type=int, default=0, help="GPU to use")
     parser.add_argument(
-        "--extra_gpus",
-        type=str,
-        default="",
-        help="Extra GPUs for data parallel, space delim",
+        "--gpu_id", type=str, default="0", help="GPU(s) to use, space delimited"
     )
     parser.add_argument(
         "--name", "-n", type=str, default=default_expname, help="experiment name"
@@ -29,8 +31,8 @@ def parse_args(
         "--dataset_format",
         "-F",
         type=str,
-        default="srn",
-        help="Dataset format, nerf | srn | realestate",
+        default=None,
+        help="Dataset format, multi_obj | dvr | dvr_gen | dvr_dtu | srn",
     )
     parser.add_argument(
         "--exp_group_name",
@@ -40,10 +42,7 @@ def parse_args(
         help="if we want to group some experiments together",
     )
     parser.add_argument(
-        "--logs_path",
-        type=str,
-        default="logs",
-        help="logs output directory",
+        "--logs_path", type=str, default="logs", help="logs output directory",
     )
     parser.add_argument(
         "--checkpoints_path",
@@ -68,7 +67,14 @@ def parse_args(
         "--gamma", type=float, default=default_gamma, help="learning rate decay factor"
     )
     parser.add_argument(
-        "--datadir", "-D", type=str, default=default_datadir, help="Dataset directory"
+        "--datadir", "-D", type=str, default=None, help="Dataset directory"
+    )
+    parser.add_argument(
+        "--ray_batch_size",
+        "-R",
+        type=int,
+        default=default_ray_batch_size,
+        help="Ray batch size",
     )
     if callback is not None:
         parser = callback(parser)
@@ -81,6 +87,30 @@ def parse_args(
 
     os.makedirs(os.path.join(args.checkpoints_path, args.name), exist_ok=True)
     os.makedirs(os.path.join(args.visual_path, args.name), exist_ok=True)
+
+    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    EXPCONF_PATH = os.path.join(PROJECT_ROOT, "expconf.conf")
+    expconf = ConfigFactory.parse_file(EXPCONF_PATH)
+
+    if args.conf is None:
+        args.conf = expconf.get_string("config." + args.name, default_conf)
+
+    if args.conf is None:
+        args.conf = expconf.get_string("config." + args.name, default_conf)
+    if args.datadir is None:
+        args.datadir = expconf.get_string("datadir." + args.name, default_datadir)
+
     conf = ConfigFactory.parse_file(args.conf)
-    print("EXPERIMENT NAME:", args.name, "CONTINUE?", "yes" if args.resume else "no")
+
+    if args.dataset_format is None:
+        args.dataset_format = conf.get_string("data.format", default_data_format)
+
+    args.gpu_id = list(map(int, args.gpu_id.split()))
+
+    print("EXPERIMENT NAME:", args.name)
+    if training:
+        print("CONTINUE?", "yes" if args.resume else "no")
+    print("* Config file:", args.conf)
+    print("* Dataset format:", args.dataset_format)
+    print("* Dataset location:", args.datadir)
     return args, conf

@@ -8,16 +8,62 @@ import torch
 import torch.nn.functional as F
 import util
 import torch.autograd.profiler as profiler
+from torch.nn import DataParallel
 from dotmap import DotMap
 
 
+class _RenderWrapper(torch.nn.Module):
+    def __init__(self, net, renderer, simple_output):
+        super().__init__()
+        self.net = net
+        self.renderer = renderer
+        self.simple_output = simple_output
+
+    def forward(self, rays, want_weights=False):
+        if rays.shape[0] == 0:
+            return (
+                torch.zeros(0, 3, device=rays.device),
+                torch.zeros(0, device=rays.device),
+            )
+
+        outputs = self.renderer(
+            self.net, rays, want_weights=want_weights and not self.simple_output
+        )
+        if self.simple_output:
+            if self.renderer.using_fine:
+                rgb = outputs.fine.rgb
+                depth = outputs.fine.depth
+            else:
+                rgb = outputs.coarse.rgb
+                depth = outputs.coarse.depth
+            return rgb, depth
+        else:
+            # Make DotMap to dict to support DataParallel
+            return outputs.toDict()
+
+
 class NeRFRenderer(torch.nn.Module):
+    """
+    NeRF differentiable renderer
+    :param n_coarse number of coarse (binned uniform) samples
+    :param n_fine number of fine (importance) samples
+    :param n_fine_depth number of expected depth samples
+    :param noise_std noise to add to sigma. We do not use it
+    :param depth_std noise for depth samples
+    :param eval_batch_size ray batch size for evaluation
+    :param white_bkgd if true, background color is white; else black
+    :param lindisp if to use samples linear in disparity instead of distance
+    :param sched ray sampling schedule. list containing 3 lists of equal length.
+    sched[0] is list of iteration numbers,
+    sched[1] is list of coarse sample numbers,
+    sched[2] is list of fine sample numbers
+    """
+
     def __init__(
         self,
         n_coarse=128,
         n_fine=0,
         n_fine_depth=0,
-        n_far=0,
         noise_std=0.0,
         depth_std=0.01,
         eval_batch_size=100000,
@@ -27,7 +73,6 @@ class NeRFRenderer(torch.nn.Module):
     ):
         super().__init__()
         self.n_coarse = n_coarse
-        self.n_far = n_far
         self.n_fine = n_fine
         self.n_fine_depth = n_fine_depth
 
@@ -40,7 +85,6 @@ class NeRFRenderer(torch.nn.Module):
         if lindisp:
             print("Using linear displacement rays")
         self.using_fine = n_fine > 0
-        self.using_bg = n_far > 0
         self.sched = sched
         if sched is not None and len(sched) == 0:
             self.sched = None
@@ -116,7 +160,7 @@ class NeRFRenderer(torch.nn.Module):
         z_samp = torch.max(torch.min(z_samp, rays[:, -1:]), rays[:, -2:-1])
         return z_samp
 
-    def composite(self, model, rays, z_samp, coarse=True, far=False, sb=0):
+    def composite(self, model, rays, z_samp, coarse=True, sb=0):
         """
         Render RGB and depth for each ray using NeRF alpha-compositing formula,
         given sampled positions along each ray (see sample_*)
@@ -132,10 +176,9 @@ class NeRFRenderer(torch.nn.Module):
             B, K = z_samp.shape
 
             deltas = z_samp[:, 1:] - z_samp[:, :-1]  # (B, K-1)
-            if far:
-                delta_inf = 1e10 * torch.ones_like(deltas[:, :1])  # infty (B, 1)
-            else:
-                delta_inf = rays[:, -1:] - z_samp[:, -1:]
+            #  if far:
+            #      delta_inf = 1e10 * torch.ones_like(deltas[:, :1])  # infty (B, 1)
+            delta_inf = rays[:, -1:] - z_samp[:, -1:]
             deltas = torch.cat([deltas, delta_inf], -1)  # (B, K)
 
             # (B, K, 3)
@@ -207,49 +250,35 @@ class NeRFRenderer(torch.nn.Module):
             )
 
     def forward(
-        self,
-        model,
-        rays,
-        want_weights=False,
+        self, model, rays, want_weights=False,
     ):
         """
-        :model nerf model, should return (B, (r, g, b, sigma)) when called with (B, (x, y, z))
-        for single-object point batch;
-        or (SB, B, (r, g, b, sigma)) when called with (SB, B, (x, y, z)), for multi-object
-        NeRF super-batch * per object point batch.
+        :model nerf model, should return (SB, B, (r, g, b, sigma))
+        when called with (SB, B, (x, y, z)), for multi-object:
+        SB = 'super-batch' = size of object batch,
+        B  = size of per-object ray batch.
         Should also support 'coarse' boolean argument for coarse NeRF.
-        :param rays ray [origins (3), directions (3), near (1), far (1)] (B, 8)
-        for single-object OR (SB, B, 8) for super-batch
-        :param want_weights if true, returns compositing weights (B, K)
-        :return rgb_fine, depth_fine, rgb_coarse, depth_coarse [, weights_fine, weights_coarse]
+        :param rays ray spec [origins (3), directions (3), near (1), far (1)] (SB, B, 8)
+        :param want_weights if true, returns compositing weights (SB, B, K)
+        :return render dict
         """
         with profiler.record_function("renderer_forward"):
             if self.sched is not None and self.last_sched.item() > 0:
                 self.n_coarse = self.sched[1][self.last_sched.item() - 1]
                 self.n_fine = self.sched[2][self.last_sched.item() - 1]
 
-            use_superbatch = len(rays.shape) == 3
-            if use_superbatch:
-                superbatch_size = rays.shape[0]
-                rays = rays.reshape(-1, 8)
-            else:
-                superbatch_size = 0
+            assert len(rays.shape) == 3
+            superbatch_size = rays.shape[0]
+            rays = rays.reshape(-1, 8)  # (SB * B, 8)
 
             z_coarse = self.sample_coarse(rays)  # (B, Kc)
             coarse_composite = self.composite(
-                model,
-                rays,
-                z_coarse,
-                coarse=True,
-                far=not self.using_bg,
-                sb=superbatch_size,
+                model, rays, z_coarse, coarse=True, sb=superbatch_size,
             )
-            # only output uncertainties for fine model
+
             outputs = DotMap(
                 coarse=self._format_outputs(
-                    coarse_composite,
-                    superbatch_size,
-                    want_weights=want_weights,
+                    coarse_composite, superbatch_size, want_weights=want_weights,
                 ),
             )
 
@@ -266,26 +295,16 @@ class NeRFRenderer(torch.nn.Module):
                 z_combine = torch.cat(all_samps, dim=-1)  # (B, Kc + Kf)
                 z_combine_sorted, argsort = torch.sort(z_combine, dim=-1)
                 fine_composite = self.composite(
-                    model,
-                    rays,
-                    z_combine_sorted,
-                    coarse=False,
-                    far=not self.using_bg,
-                    sb=superbatch_size,
+                    model, rays, z_combine_sorted, coarse=False, sb=superbatch_size,
                 )
                 outputs.fine = self._format_outputs(
-                    fine_composite,
-                    superbatch_size,
-                    want_weights=want_weights,
+                    fine_composite, superbatch_size, want_weights=want_weights,
                 )
 
             return outputs
 
     def _format_outputs(
-        self,
-        rendered_outputs,
-        superbatch_size,
-        want_weights=False,
+        self, rendered_outputs, superbatch_size, want_weights=False,
     ):
         weights, rgb, depth = rendered_outputs
         if superbatch_size > 0:
@@ -298,6 +317,10 @@ class NeRFRenderer(torch.nn.Module):
         return ret_dict
 
     def sched_step(self, steps=1):
+        """
+        Called each training iteration to update sample numbers
+        according to schedule
+        """
         if self.sched is None:
             return
         self.iter_idx += steps
@@ -321,11 +344,29 @@ class NeRFRenderer(torch.nn.Module):
             conf.get_int("n_coarse", 128),
             conf.get_int("n_fine", 0),
             n_fine_depth=conf.get_int("n_fine_depth", 0),
-            n_far=conf.get_int("n_far", 0),
             noise_std=conf.get_float("noise_std", 0.0),
             depth_std=conf.get_float("depth_std", 0.01),
-            white_bkgd=white_bkgd,
+            white_bkgd=conf.get_float("white_bkgd", white_bkgd),
             lindisp=lindisp,
             eval_batch_size=conf.get_int("eval_batch_size", eval_batch_size),
             sched=conf.get_list("sched", None),
         )
+
+    def bind_parallel(self, net, gpus=None, simple_output=False):
+        """
+        Returns a wrapper module compatible with DataParallel.
+        Specifically, it renders rays with this renderer
+        but always using the given network instance.
+        Specify a list of GPU ids in 'gpus' to apply DataParallel automatically.
+        :param net A PixelNeRF network
+        :param gpus list of GPU ids to parallize to. If length is 1,
+        does not parallelize
+        :param simple_output only returns rendered (rgb, depth) instead of the 
+        full render output map. Saves data tranfer cost.
+        :return torch module
+        """
+        wrapped = _RenderWrapper(net, self, simple_output=simple_output)
+        if gpus is not None and len(gpus) > 1:
+            print("Using multi-GPU", gpus)
+            wrapped = torch.nn.DataParallel(wrapped, gpus, dim=1)
+        return wrapped

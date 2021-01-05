@@ -8,6 +8,7 @@ from .model_util import make_encoder, make_mlp
 import torch.autograd.profiler as profiler
 from util import repeat_interleave
 import os
+import os.path as osp
 import warnings
 
 
@@ -71,9 +72,6 @@ class PixelNeRFNet(torch.nn.Module):
         self.mlp_fine = make_mlp(
             conf["mlp_fine"], d_in, d_latent, d_out=d_out, allow_empty=True
         )
-        self.mlp_far = make_mlp(
-            conf["mlp_far"], d_in, d_latent, d_out=d_out, allow_empty=True
-        )
         # Note: this is world -> camera, and bottom row is omitted
         self.register_buffer("poses", torch.empty(1, 3, 4), persistent=False)
         self.register_buffer("image_shape", torch.empty(2), persistent=False)
@@ -126,9 +124,10 @@ class PixelNeRFNet(torch.nn.Module):
             # Vector f: fx = fy = f_i *for view i*
             # Length should match NS (or 1 for broadcast)
             focal = focal.unsqueeze(-1).repeat((1, 2))
-        # Otherwise, can specify as
-        focal[..., 1] *= -1.0
+        else:
+            focal = focal.clone()
         self.focal = focal.float()
+        self.focal[..., 1] *= -1.0
 
         if c is None:
             # Default principal point is center of image
@@ -146,33 +145,27 @@ class PixelNeRFNet(torch.nn.Module):
 
     def forward(self, xyz, coarse=True, viewdirs=None, far=False):
         """
-        Predict (r, g, b, sigma) at canonical space points xyz.
+        Predict (r, g, b, sigma) at world space points xyz.
         Please call encode first!
-        :param xyz (SB, B, 3) or (B, 3);
+        :param xyz (SB, B, 3)
         SB is batch of objects
         B is batch of points (in rays)
         NS is number of input views
         :return (SB, B, 4) r g b sigma
         """
-        #  with profiler.profile(record_shapes=True) as prof:
         with profiler.record_function("model_inference"):
-            single = len(xyz.shape) == 2
-            if single:
-                # Single batch (either object or view), i.e. SB = 1
-                xyz = xyz[None]
-                if self.num_objs > 1:
-                    xyz = xyz.expand(self.num_objs, -1, -1)
             SB, B, _ = xyz.shape
             NS = self.num_views_per_obj
 
             # Transform query points into the camera spaces of the input views
-            xyz = repeat_interleave(xyz, NS, dim=0)  # (SB*NS, B, 3)
+            xyz = repeat_interleave(xyz, NS)  # (SB*NS, B, 3)
             xyz_rot = torch.matmul(self.poses[:, None, :3, :3], xyz.unsqueeze(-1))[
                 ..., 0
             ]
             xyz = xyz_rot + self.poses[:, None, :3, 3]
 
             if self.d_in > 0:
+                # * Encode the xyz coordinates
                 if self.use_xyz:
                     if self.normalize_z:
                         z_feature = xyz_rot.reshape(-1, 3)  # (SB*B, 3)
@@ -189,12 +182,11 @@ class PixelNeRFNet(torch.nn.Module):
                     z_feature = self.code(z_feature)
 
                 if self.use_viewdirs:
+                    # * Encode the view directions
                     assert viewdirs is not None
                     # Viewdirs to input view space
                     viewdirs = viewdirs.reshape(SB, B, 3, 1)
-                    viewdirs = repeat_interleave(
-                        viewdirs, NS, dim=0
-                    )  # (SB*NS, B, 3, 1)
+                    viewdirs = repeat_interleave(viewdirs, NS)  # (SB*NS, B, 3, 1)
                     viewdirs = torch.matmul(
                         self.poses[:, None, :3, :3], viewdirs
                     )  # (SB*NS, B, 3, 1)
@@ -213,10 +205,10 @@ class PixelNeRFNet(torch.nn.Module):
                 # Grab encoder's latent code.
                 uv = -xyz[:, :, :2] / xyz[:, :, 2:]  # (SB, B, 2)
                 uv *= repeat_interleave(
-                    self.focal.unsqueeze(1), NS if self.focal.shape[0] > 1 else 1, dim=0
+                    self.focal.unsqueeze(1), NS if self.focal.shape[0] > 1 else 1
                 )
                 uv += repeat_interleave(
-                    self.c.unsqueeze(1), NS if self.c.shape[0] > 1 else 1, dim=0
+                    self.c.unsqueeze(1), NS if self.c.shape[0] > 1 else 1
                 )  # (SB*NS, B, 2)
                 latent = self.encoder.index(
                     uv, None, self.image_shape
@@ -239,7 +231,7 @@ class PixelNeRFNet(torch.nn.Module):
                 global_latent = self.global_encoder.latent
                 assert mlp_input.shape[0] % global_latent.shape[0] == 0
                 num_repeats = mlp_input.shape[0] // global_latent.shape[0]
-                global_latent = repeat_interleave(global_latent, num_repeats, 0)
+                global_latent = repeat_interleave(global_latent, num_repeats)
                 mlp_input = torch.cat((global_latent, mlp_input), dim=-1)
 
             # Camera frustum culling stuff, currently disabled
@@ -271,10 +263,6 @@ class PixelNeRFNet(torch.nn.Module):
             output_list = [torch.sigmoid(rgb), torch.relu(sigma)]
             output = torch.cat(output_list, dim=-1)
             output = output.reshape(SB, B, -1)
-
-            if single:
-                output = output[0]
-
         return output
 
     def load_weights(self, args, opt_init=False, strict=True, device=None):
@@ -300,15 +288,29 @@ class PixelNeRFNet(torch.nn.Module):
                 torch.load(model_path, map_location=device), strict=strict
             )
         elif not opt_init:
-            warnings.warn("WARNING: {} does not exist, not loaded".format(model_path))
+            warnings.warn(
+                (
+                    "WARNING: {} does not exist, not loaded!! Model will be re-initialized.\n"
+                    + "If you are trying to load a pretrained model, STOP since it's not in the right place. "
+                    + "If training, unless you are startin a new experiment, please remember to pass --resume."
+                ).format(model_path)
+            )
+        return self
 
     def save_weights(self, args, opt_init=False):
         """
         Helper for saving weights according to argparse arguments
         :param opt_init if true, saves from init checkpoint instead of usual
         """
+        from shutil import copyfile
+
         ckpt_name = "pixel_nerf_init" if opt_init else "pixel_nerf_latest"
-        torch.save(
-            self.state_dict(),
-            "%s/%s/%s" % (args.checkpoints_path, args.name, ckpt_name),
-        )
+        backup_name = "pixel_nerf_init_backup" if opt_init else "pixel_nerf_backup"
+
+        ckpt_path = osp.join(args.checkpoints_path, args.name, ckpt_name)
+        ckpt_backup_path = osp.join(args.checkpoints_path, args.name, backup_name)
+
+        if osp.exists(ckpt_path):
+            copyfile(ckpt_path, ckpt_backup_path)
+        torch.save(self.state_dict(), ckpt_path)
+        return self
