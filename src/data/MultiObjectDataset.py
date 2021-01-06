@@ -14,7 +14,17 @@ from util import get_image_to_tensor_balanced, get_mask_to_tensor
 class MultiObjectDataset(torch.utils.data.Dataset):
     """Synthetic dataset of scenes with multiple Shapenet objects"""
 
-    def __init__(self, path, z_near=4, z_far=9, n_views=None):
+    def __init__(self, path, z_near=4, z_far=9, n_views=None, compose=False):
+        """
+        :param path data directory
+        :param z_near near bound for ray sampling
+        :param z_far far bound for ray sampling
+        :param n_views optional: expected number of views per object in dataset
+        for validity checking only
+        :param compose if true, adds background to images.
+        Dataset must have background '*_env.png' in addition to foreground
+        '*_obj.png' for each view.
+        """
         super().__init__()
         self.base_path = path
         print("Loading NeRF synthetic dataset", self.base_path)
@@ -86,9 +96,16 @@ class MultiObjectDataset(torch.utils.data.Dataset):
             bbox = torch.tensor([cmin, rmin, cmax, rmax], dtype=torch.float32)
 
             img_tensor = self.image_to_tensor(img[..., :3])
-            img = img_tensor * mask + (
-                1.0 - mask
-            )  # solid white background where transparent
+            if self.compose:
+                env_path = os.path.join(dir_path, "{}_env.png".format(basename))
+                env_img = self.image_to_tensor(imageio.imread(env_path)[..., :3])
+                img = img_tensor * mask + (
+                    env_img * (1.0 - mask)
+                )  # env image where transparent
+            else:
+                img = img_tensor * mask + (
+                    1.0 - mask
+                )  # solid white background where transparent
             all_imgs.append(img)
             all_bboxes.append(bbox)
             all_masks.append(mask)
