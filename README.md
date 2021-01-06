@@ -131,7 +131,7 @@ Please refer the the following table
 | SRN chairs                 | srn_chair     | conf/exp/srn.conf                  | srn_chairs.zip                          | path/chairs       |
 | SRN cars                   | srn_car       | conf/exp/srn.conf                  | srn_cars.zip                            | path/cars         |
 | DTU                        | dtu           | conf/exp/dtu.conf                  | dtu_dataset.zip                         | path/rs_dtu_4     |
-| Two chairs                 | TBA           | TBA                                | multi_chair_*.zip                       | path              |
+| Two chairs                 | multi_obj     | conf/exp/multi_obj.conf            | multi_chair_{train/test/val}.zip        | path              |
 
 
 # Quantitative evaluation instructions
@@ -224,6 +224,7 @@ Check out `train/train.py`. More information to come.
 
 - Example for training to DTU: `python train/train.py -n dtu_exp -c conf/exp/dtu.conf -D <data dir>/rs_dtu_4 -V 3 --gpu_id=<GPU> --resume`
 - Example for training to SRN cars, 1 view: `python train/train.py -n srn_car_exp -c conf/exp/srn.conf -D <srn data dir>/cars --gpu_id=<GPU> --resume`
+- Example for training to ShapeNet multi-chair, 2 view: `python train/train.py -n multi_obj -c conf/exp/multi_obj.conf -D <data dir> -V 2 --gpu_id=<GPU> --resume`
 
 Additional flags
 - `--resume` to resume from checkpoint, if available. Usually just pass this to be safe.

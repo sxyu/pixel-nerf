@@ -14,13 +14,14 @@ from util import get_image_to_tensor_balanced, get_mask_to_tensor
 class MultiObjectDataset(torch.utils.data.Dataset):
     """Synthetic dataset of scenes with multiple Shapenet objects"""
 
-    def __init__(self, path, z_near=4, z_far=9, n_views=None):
+    def __init__(self, path, stage="train", z_near=4, z_far=9, n_views=None):
         super().__init__()
+        path = os.path.join(path, stage)
         self.base_path = path
         print("Loading NeRF synthetic dataset", self.base_path)
         trans_files = []
         TRANS_FILE = "transforms.json"
-        for root, directories, filenames in os.walk(path):
+        for root, directories, filenames in os.walk(self.base_path):
             if TRANS_FILE in filenames:
                 trans_files.append(os.path.join(root, TRANS_FILE))
         self.trans_files = trans_files
@@ -29,8 +30,10 @@ class MultiObjectDataset(torch.utils.data.Dataset):
 
         self.z_near = z_near
         self.z_far = z_far
-        self.compose = compose
+        self.lindisp = False
         self.n_views = n_views
+
+        print("{} instances in split {}".format(len(self.trans_files), stage))
 
     def __len__(self):
         return len(self.trans_files)

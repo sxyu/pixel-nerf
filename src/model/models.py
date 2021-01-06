@@ -315,6 +315,7 @@ class PixelNeRFNet(torch.nn.Module):
 
         ckpt_path = osp.join(args.checkpoints_path, args.name, ckpt_name)
         ckpt_backup_path = osp.join(args.checkpoints_path, args.name, backup_name)
+        if os.path.exists(ckpt_path): # if checkpoint already exists, save it in a backup
+            copyfile(ckpt_path, ckpt_backup_path)
 
-        copyfile(ckpt_path, ckpt_backup_path)
         torch.save(self.state_dict(), ckpt_path)
