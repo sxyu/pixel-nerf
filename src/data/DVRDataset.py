@@ -201,14 +201,6 @@ class DVRDataset(torch.utils.data.Dataset):
                     assert abs(fx - focal) < 1e-5
                 pose = extr_inv_mtx
 
-            tl = torch.tensor(
-                [[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]],
-                dtype=torch.float32,
-            )
-            tr = torch.tensor(
-                [[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]],
-                dtype=torch.float32,
-            )
             pose = (
                 self._coord_trans_world
                 @ torch.tensor(pose, dtype=torch.float32)
