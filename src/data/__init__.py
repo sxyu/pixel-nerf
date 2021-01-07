@@ -7,8 +7,7 @@ from .SRNDataset import SRNDataset
 from .data_util import ColorJitterDataset
 
 
-def get_split_dataset(dataset_type, datadir, want_split="all",
-                      training=True, **kwargs):
+def get_split_dataset(dataset_type, datadir, want_split="all", training=True, **kwargs):
     """
     Retrieved desired dataset class
     :param dataset_type dataset type name (srn|dvr|dvr_gen, etc)
@@ -17,7 +16,7 @@ def get_split_dataset(dataset_type, datadir, want_split="all",
     :param want_split root directory name for the dataset
     :param training set to False in eval scripts
     """
-    dset_class, train_aug = None, None 
+    dset_class, train_aug = None, None
     flags, train_aug_flags = {}, {}
 
     if dataset_type == "srn":
@@ -29,7 +28,7 @@ def get_split_dataset(dataset_type, datadir, want_split="all",
     elif dataset_type.startswith("dvr"):
         # For ShapeNet 64x64
         dset_class = DVRDataset
-        if  dataset_type == "dvr_gen":
+        if dataset_type == "dvr_gen":
             # For generalization training (train some categories, eval on others)
             flags["list_prefix"] = "gen_"
         elif dataset_type == "dvr_dtu":

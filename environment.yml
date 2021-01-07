@@ -21,5 +21,5 @@ dependencies:
   - matplotlib
   - pytorch==1.6.0
   - torchvision==0.7.0
-  - scikit-image
+  - scikit-image==0.17.2
   - tqdm

@@ -5,6 +5,7 @@ import torchvision.transforms.functional_tensor as F_t
 import torchvision.transforms.functional as TF
 import numpy as np
 import imageio
+
 #  from util import GaussianBlur
 
 
@@ -22,7 +23,7 @@ class ColorJitterDataset(torch.utils.data.Dataset):
         self.saturation_range = [1 - saturation_range, 1 + saturation_range]
         self.brightness_range = [1 - brightness_range, 1 + brightness_range]
         self.contrast_range = [1 - contrast_range, 1 + contrast_range]
-        inherit_attrs = ['z_near', 'z_far', 'lindisp', 'base_path', 'image_to_tensor']
+        inherit_attrs = ["z_near", "z_far", "lindisp", "base_path", "image_to_tensor"]
         inherit_attrs.extend(extra_inherit_attrs)
 
         self.base_dset = base_dset

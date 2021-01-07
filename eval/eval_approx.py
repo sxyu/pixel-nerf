@@ -9,7 +9,10 @@ May not work for DTU.
 """
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+)
 
 import torch
 import numpy as np
@@ -37,14 +40,14 @@ def extra_args(parser):
         default="64",
         help="Source view(s) in image, in increasing order. -1 to use random 1 view.",
     )
-    parser.add_argument(
-        "--black",
-        action="store_true",
-        help="Force renderer to use a black background.",
-    )
 
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
-    parser.add_argument("--seed", type=int, default=1234, help="Random seed for selecting target views of each object")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=1234,
+        help="Random seed for selecting target views of each object",
+    )
     parser.add_argument("--coarse", action="store_true", help="Coarse network as fine")
     return parser
 
@@ -52,25 +55,23 @@ def extra_args(parser):
 args, conf = util.args.parse_args(extra_args)
 args.resume = True
 
-device = util.get_cuda(args.gpu_id)
+device = util.get_cuda(args.gpu_id[0])
 net = make_model(conf["model"]).to(device=device)
 net.load_weights(args)
 
 if args.coarse:
     net.mlp_fine = None
 
-device = util.get_cuda(args.gpu_id)
-
-dset = get_split_dataset(args.dataset_format, args.datadir,
-        want_split=args.split, training=False)
+dset = get_split_dataset(
+    args.dataset_format, args.datadir, want_split=args.split, training=False
+)
 data_loader = torch.utils.data.DataLoader(
     dset, batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=False
 )
 
-renderer = NeRFRenderer.from_conf(conf["renderer"], white_bkgd=not args.black,
-        eval_batch_size=args.ray_batch_size).to(device=device)
-net.eval()
-renderer.eval()
+renderer = NeRFRenderer.from_conf(
+    conf["renderer"], eval_batch_size=args.ray_batch_size
+).to(device=device)
 
 if renderer.n_coarse < 64:
     # Ensure decent sampling resolution
@@ -79,6 +80,8 @@ if args.coarse:
     renderer.n_coarse = 64
     renderer.n_fine = 128
     renderer.using_fine = True
+
+render_par = renderer.bind_parallel(net, args.gpu_id, simple_output=True).eval()
 
 z_near = dset.z_near
 z_far = dset.z_far
@@ -128,12 +131,9 @@ with torch.no_grad():
             focal.to(device=device),
         )
 
-        outputs = renderer(net, all_rays.to(device=device))
-        if renderer.using_fine:
-            rgb_fine = outputs.fine.rgb.cpu()
-        else:
-            rgb_fine = outputs.coarse.rgb.cpu()
-        rgb_fine = rgb_fine.reshape(SB, H, W, 3).numpy()
+        rgb_fine, _depth = render_par(all_rays.to(device=device))
+        _depth = None
+        rgb_fine = rgb_fine.reshape(SB, H, W, 3).cpu().numpy()
         images_gt = util.batched_index_select_nd(images_0to1, dest_view).reshape(
             SB, 3, H, W
         )

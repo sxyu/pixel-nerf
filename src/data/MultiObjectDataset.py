@@ -1,4 +1,5 @@
 import os
+import os.path as osp
 import glob
 import json
 import imageio
@@ -14,16 +15,30 @@ from util import get_image_to_tensor_balanced, get_mask_to_tensor
 class MultiObjectDataset(torch.utils.data.Dataset):
     """Synthetic dataset of scenes with multiple Shapenet objects"""
 
-    def __init__(self, path, stage="train", z_near=4, z_far=9, n_views=None):
+    def __init__(self, path, stage="train", z_near=4, z_far=9, n_views=None, compose=False,
+                 split_seed=1234, val_frac=0.2, test_frac=0.2):
+        """
+        :param path data directory
+        :para stage train | val | test
+        :param z_near near bound for ray sampling
+        :param z_far far bound for ray sampling
+        :param n_views optional: expected number of views per object in dataset
+        for validity checking only
+        :param compose if true, adds background to images.
+        Dataset must have background '*_env.png' in addition to foreground
+        '*_obj.png' for each view.
+        """
         super().__init__()
         path = os.path.join(path, stage)
         self.base_path = path
-        print("Loading NeRF synthetic dataset", self.base_path)
+        self.stage = stage
+
+        print("Loading NeRF synthetic dataset", self.base_path, "stage", self.stage)
         trans_files = []
         TRANS_FILE = "transforms.json"
         for root, directories, filenames in os.walk(self.base_path):
             if TRANS_FILE in filenames:
-                trans_files.append(os.path.join(root, TRANS_FILE))
+                trans_files.append(osp.join(root, TRANS_FILE))
         self.trans_files = trans_files
         self.image_to_tensor = get_image_to_tensor_balanced()
         self.mask_to_tensor = get_mask_to_tensor()
@@ -31,9 +46,12 @@ class MultiObjectDataset(torch.utils.data.Dataset):
         self.z_near = z_near
         self.z_far = z_far
         self.lindisp = False
+
+        self.compose = compose
         self.n_views = n_views
 
-        print("{} instances in split {}".format(len(self.trans_files), stage))
+        # Load data split
+        self._load_split(val_frac, test_frac, split_seed)
 
     def __len__(self):
         return len(self.trans_files)
@@ -42,7 +60,7 @@ class MultiObjectDataset(torch.utils.data.Dataset):
         if self.n_views is None:
             return True
         trans_file = self.trans_files[index]
-        dir_path = os.path.dirname(trans_file)
+        dir_path = osp.dirname(trans_file)
         try:
             with open(trans_file, "r") as f:
                 transform = json.load(f)
@@ -52,16 +70,47 @@ class MultiObjectDataset(torch.utils.data.Dataset):
             return False
         if len(transform["frames"]) != self.n_views:
             return False
-        if len(glob.glob(os.path.join(dir_path, "*.png"))) != self.n_views:
+        if len(glob.glob(osp.join(dir_path, "*.png"))) != self.n_views:
             return False
         return True
+
+    def _load_split(self, val_frac, test_frac, seed):
+        permute_file = osp.join(self.base_path, "split_{}.pth".format(seed))
+        num_objs = len(self)
+        if osp.isfile(permute_file):
+            print("Loading dataset split from {}".format(permute_file))
+            permute = torch.load(permute_file)
+        else:
+            if val_frac == 0 and test_frac == 0:
+                warn("creating empty validation and test sets")
+            state = np.random.get_state()
+            np.random.seed(seed)
+            print("Created dataset split in {}".format(permute_file))
+
+            permute = np.random.permutation(num_objs)
+            torch.save(permute, permute_file)
+            np.random.set_state(state)
+
+        val_size = int(val_frac * num_objs)
+        test_size = int(test_frac * num_objs)
+        train_end = num_objs - (val_size + test_size)
+        val_end = num_objs - test_size
+
+        if self.stage == 'train':
+            subset = permute[:train_end]
+        elif self.stage == 'val':
+            subset = permute[train_end:val_end]
+        elif self.stage == 'test':
+            subset = permute[val_end:]
+        self.trans_files = [self.trans_files[i] for i in subset]
+        assert len(self) == len(subset)
 
     def __getitem__(self, index):
         if not self._check_valid(index):
             return {}
 
         trans_file = self.trans_files[index]
-        dir_path = os.path.dirname(trans_file)
+        dir_path = osp.dirname(trans_file)
         with open(trans_file, "r") as f:
             transform = json.load(f)
 
@@ -69,10 +118,11 @@ class MultiObjectDataset(torch.utils.data.Dataset):
         all_bboxes = []
         all_masks = []
         all_poses = []
+
         for frame in transform["frames"]:
             fpath = frame["file_path"]
-            basename = os.path.splitext(os.path.basename(fpath))[0]
-            obj_path = os.path.join(dir_path, "{}_obj.png".format(basename))
+            basename = osp.splitext(osp.basename(fpath))[0]
+            obj_path = osp.join(dir_path, "{}_obj.png".format(basename))
             img = imageio.imread(obj_path)
             mask = self.mask_to_tensor(img[..., 3])
             rows = np.any(img, axis=1)
@@ -89,9 +139,17 @@ class MultiObjectDataset(torch.utils.data.Dataset):
             bbox = torch.tensor([cmin, rmin, cmax, rmax], dtype=torch.float32)
 
             img_tensor = self.image_to_tensor(img[..., :3])
-            img = img_tensor * mask + (
-                1.0 - mask
-            )  # solid white background where transparent
+            if self.compose:
+                env_path = osp.join(dir_path, "{}_env.png".format(basename))
+                env_img = self.image_to_tensor(imageio.imread(env_path)[..., :3])
+                img = img_tensor * mask + (
+                    env_img * (1.0 - mask)
+                )  # env image where transparent
+            else:
+                img = img_tensor * mask + (
+                    1.0 - mask
+                )  # solid white background where transparent
+
             all_imgs.append(img)
             all_bboxes.append(bbox)
             all_masks.append(mask)
@@ -114,4 +172,5 @@ class MultiObjectDataset(torch.utils.data.Dataset):
             "bbox": bboxes,
             "poses": poses,
         }
+
         return result

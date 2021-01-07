@@ -20,16 +20,20 @@ import torch
 import imageio
 import json
 
-parser = argparse.ArgumentParser(
-    description="Calculate PSNR for rendered images."
+parser = argparse.ArgumentParser(description="Calculate PSNR for rendered images.")
+parser.add_argument(
+    "--datadir",
+    "-D",
+    type=str,
+    default="/home/group/chairs_test",
+    help="Dataset directory; note: different from usual, directly use the thing please",
 )
 parser.add_argument(
-    "--datadir", "-D", type=str, default="/home/group/chairs_test",
-    help="Dataset directory; note: different from usual, directly use the thing please"
-)
-parser.add_argument(
-    "--output", "-O", type=str, default="eval",
-    help="Root path of rendered output (our format, from eval.py)"
+    "--output",
+    "-O",
+    type=str,
+    default="eval",
+    help="Root path of rendered output (our format, from eval.py)",
 )
 parser.add_argument(
     "--dataset_format",
@@ -39,66 +43,68 @@ parser.add_argument(
     help="Dataset format, nerf | srn | dvr",
 )
 parser.add_argument(
-    "--list_name",
-    type=str,
-    default="softras_test",
-    help="Filter list prefix for DVR",
+    "--list_name", type=str, default="softras_test", help="Filter list prefix for DVR",
 )
 parser.add_argument(
     "--gpu_id",
     type=int,
-    default=0
+    default=0,
+    help="GPU id. Only single GPU supported for this script.",
 )
 parser.add_argument(
-    "--overwrite",
-    action='store_true',
-    help="overwriting existing metrics.txt",
+    "--overwrite", action="store_true", help="overwriting existing metrics.txt",
 )
 parser.add_argument(
-    "--exclude_dtu_bad",
-    action='store_true',
-    help="exclude hardcoded DTU bad views",
+    "--exclude_dtu_bad", action="store_true", help="exclude hardcoded DTU bad views",
 )
-parser.add_argument("--multicat", action="store_true",
-        help="Prepend category id to object id. Specify if model fits multiple categories.")
+parser.add_argument(
+    "--multicat",
+    action="store_true",
+    help="Prepend category id to object id. Specify if model fits multiple categories.",
+)
 
 parser.add_argument(
-    "--viewlist", "-L", type=str, default='', help="Path to source view list e.g. src_dvr.txt; if specified, excludes the source view from evaluation"
+    "--viewlist",
+    "-L",
+    type=str,
+    default="",
+    help="Path to source view list e.g. src_dvr.txt; if specified, excludes the source view from evaluation",
 )
 parser.add_argument(
     "--eval_view_list", type=str, default=None, help="Path to eval view list"
 )
 parser.add_argument(
-    "--primary", "-P", type=str, default='', help="List of views to exclude"
+    "--primary", "-P", type=str, default="", help="List of views to exclude"
 )
 parser.add_argument(
-    "--lpips_batch_size",
-    type=int,
-    default=32,
-    help="Batch size for LPIPS",
+    "--lpips_batch_size", type=int, default=32, help="Batch size for LPIPS",
 )
 
 parser.add_argument(
-    "--reduce_only", "-R",
-    action='store_true',
+    "--reduce_only",
+    "-R",
+    action="store_true",
     help="skip the map (per-obj metric computation)",
 )
 parser.add_argument(
-    "--metadata", type=str, default="metadata.yaml",
-    help="Path to dataset metadata under datadir, used for getting category names if --multicat"
+    "--metadata",
+    type=str,
+    default="metadata.yaml",
+    help="Path to dataset metadata under datadir, used for getting category names if --multicat",
 )
-parser.add_argument("--dtu_sort", action="store_true",
-        help="Sort using DTU scene order instead of lex")
+parser.add_argument(
+    "--dtu_sort", action="store_true", help="Sort using DTU scene order instead of lex"
+)
 args = parser.parse_args()
 
 
-if args.dataset_format == 'dvr':
+if args.dataset_format == "dvr":
     list_name = args.list_name + ".lst"
     img_dir_name = "image"
-elif args.dataset_format == 'srn':
+elif args.dataset_format == "srn":
     list_name = ""
     img_dir_name = "rgb"
-elif args.dataset_format == 'nerf':
+elif args.dataset_format == "nerf":
     warnings.warn("test split not implemented for NeRF synthetic data format")
     list_name = ""
     img_dir_name = ""
@@ -109,28 +115,34 @@ else:
 data_root = args.datadir
 render_root = args.output
 
+
 def run_map():
     if args.multicat:
         cats = os.listdir(data_root)
 
         def fmt_obj_name(c, x):
-            return c + '_' + x
+            return c + "_" + x
+
     else:
-        cats = ['.']
+        cats = ["."]
 
         def fmt_obj_name(c, x):
             return x
 
     use_exclude_lut = len(args.viewlist) > 0
     if use_exclude_lut:
-        print('Excluding views from list', args.viewlist)
-        with open(args.viewlist, 'r') as f:
+        print("Excluding views from list", args.viewlist)
+        with open(args.viewlist, "r") as f:
             tmp = [x.strip().split() for x in f.readlines()]
-        exclude_lut = {x[0] + '/' + x[1]: torch.tensor(
-            list(map(int, x[2:])), dtype=torch.long) for x in tmp}
+        exclude_lut = {
+            x[0] + "/" + x[1]: torch.tensor(list(map(int, x[2:])), dtype=torch.long)
+            for x in tmp
+        }
     base_exclude_views = list(map(int, args.primary.split()))
     if args.exclude_dtu_bad:
-        base_exclude_views.extend([3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 36, 37, 38, 39])
+        base_exclude_views.extend(
+            [3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 36, 37, 38, 39]
+        )
 
     if args.eval_view_list is not None:
         with open(args.eval_view_list, "r") as f:
@@ -153,7 +165,7 @@ def run_map():
 
         if len(list_name) > 0:
             list_path = osp.join(cat_root, list_name)
-            with open(list_path, 'r') as f:
+            with open(list_path, "r") as f:
                 split = set([x.strip() for x in f.readlines()])
             objs = [x for x in objs if x in split]
 
@@ -164,38 +176,30 @@ def run_map():
 
         objs = list(zip(objs, objs_rend))
         objs_avail = [x for x in objs if osp.exists(x[1])]
-        print(cat, 'TOTAL', len(objs), 'AVAILABLE', len(objs_avail))
+        print(cat, "TOTAL", len(objs), "AVAILABLE", len(objs_avail))
         #  assert len(objs) == len(objs_avail)
         total_objs += len(objs)
         all_objs.extend(objs_avail)
-    print(">>> USING", len(all_objs), 'OF', total_objs, 'OBJECTS')
+    print(">>> USING", len(all_objs), "OF", total_objs, "OBJECTS")
 
-
-    cuda = 'cuda:' + str(args.gpu_id)
-    lpips_vgg = lpips.LPIPS(net='vgg').to(device=cuda)
-
+    cuda = "cuda:" + str(args.gpu_id)
+    lpips_vgg = lpips.LPIPS(net="vgg").to(device=cuda)
 
     def get_metrics(rgb, gt):
-        ssim = skimage.measure.compare_ssim(
-            rgb, gt, multichannel=True, data_range=1
-        )
-        psnr = skimage.measure.compare_psnr(
-            rgb, gt, data_range=1
-        )
+        ssim = skimage.measure.compare_ssim(rgb, gt, multichannel=True, data_range=1)
+        psnr = skimage.measure.compare_psnr(rgb, gt, data_range=1)
         return psnr, ssim
-
 
     def isimage(path):
         ext = osp.splitext(path)[1]
-        return ext == '.jpg' or ext == '.png'
-
+        return ext == ".jpg" or ext == ".png"
 
     def process_obj(path, rend_path):
         if len(img_dir_name) > 0:
             im_root = osp.join(path, img_dir_name)
         else:
             im_root = path
-        out_path = osp.join(rend_path, 'metrics.txt')
+        out_path = osp.join(rend_path, "metrics.txt")
         if osp.exists(out_path) and not args.overwrite:
             return
         ims = [x for x in sorted(os.listdir(im_root)) if isimage(x)]
@@ -205,7 +209,7 @@ def run_map():
         preds = []
         num_ims = 0
         if use_exclude_lut:
-            lut_key = osp.basename(rend_path).replace('_', '/')
+            lut_key = osp.basename(rend_path).replace("_", "/")
             exclude_views = exclude_lut[lut_key]
         else:
             exclude_views = []
@@ -214,7 +218,7 @@ def run_map():
         for im_name in ims:
             im_path = osp.join(im_root, im_name)
             im_name_id = int(osp.splitext(im_name)[0])
-            im_name_out = '{:06}.png'.format(im_name_id)
+            im_name_out = "{:06}.png".format(im_name_id)
             im_rend_path = osp.join(rend_path, im_name_out)
             if osp.exists(im_rend_path) and im_name_id not in exclude_views:
                 if eval_views is not None and im_name_id not in eval_views:
@@ -242,10 +246,9 @@ def run_map():
         lpips = lpips.mean().item()
         psnr_avg /= num_ims
         ssim_avg /= num_ims
-        out_txt = 'psnr {}\nssim {}\nlpips {}'.format(psnr_avg, ssim_avg, lpips)
-        with open(out_path, 'w') as f:
+        out_txt = "psnr {}\nssim {}\nlpips {}".format(psnr_avg, ssim_avg, lpips)
+        with open(out_path, "w") as f:
             f.write(out_txt)
-
 
     for obj_path, obj_rend_path in tqdm(all_objs):
         process_obj(obj_path, obj_rend_path)
@@ -253,25 +256,25 @@ def run_map():
 
 def run_reduce():
     if args.multicat:
-        meta = json.load(open(osp.join(args.datadir, args.metadata), 'r'))
+        meta = json.load(open(osp.join(args.datadir, args.metadata), "r"))
         cats = sorted(list(meta.keys()))
-        cat_description = {cat : meta[cat]['name'].split(',')[0] for cat in cats}
+        cat_description = {cat: meta[cat]["name"].split(",")[0] for cat in cats}
 
     all_objs = []
     objs = [x for x in os.listdir(render_root)]
-    objs = [osp.join(render_root, x) for x in objs if x[0] != '_']
+    objs = [osp.join(render_root, x) for x in objs if x[0] != "_"]
     objs = [x for x in objs if osp.isdir(x)]
     if args.dtu_sort:
-        objs = sorted(objs, key=lambda x: int(x[x.rindex('/') + 5:]))
+        objs = sorted(objs, key=lambda x: int(x[x.rindex("/") + 5 :]))
     else:
         objs = sorted(objs)
     all_objs.extend(objs)
 
-    print(">>> PROCESSING", len(all_objs), 'OBJECTS')
+    print(">>> PROCESSING", len(all_objs), "OBJECTS")
 
-    METRIC_NAMES = ['psnr', 'ssim', 'lpips']
+    METRIC_NAMES = ["psnr", "ssim", "lpips"]
 
-    out_metrics_path = osp.join(render_root, 'all_metrics.txt')
+    out_metrics_path = osp.join(render_root, "all_metrics.txt")
 
     if args.multicat:
         cat_sz = {}
@@ -282,29 +285,33 @@ def run_reduce():
     for name in METRIC_NAMES:
         if args.multicat:
             for cat in cats:
-                all_metrics[cat + '.' + name] = 0.0
+                all_metrics[cat + "." + name] = 0.0
         all_metrics[name] = 0.0
 
+    should_print_all_objs = len(all_objs) < 100
+
     for obj_root in tqdm(all_objs):
-        metrics_path = osp.join(obj_root, 'metrics.txt')
-        with open(metrics_path, 'r') as f:
+        metrics_path = osp.join(obj_root, "metrics.txt")
+        with open(metrics_path, "r") as f:
             metrics = [line.split() for line in f.readlines()]
         if args.multicat:
-            cat_name = osp.basename(obj_root).split('_')[0]
+            cat_name = osp.basename(obj_root).split("_")[0]
             cat_sz[cat_name] += 1
             for metric, val in metrics:
-                all_metrics[cat_name + '.' + metric] += float(val)
-        print(obj_root, end=' ')
-        for metric, val in metrics:
-            all_metrics[metric] += float(val)
-            print(val, end=' ')
-        print()
+                all_metrics[cat_name + "." + metric] += float(val)
+
+        if should_print_all_objs:
+            print(obj_root, end=" ")
+            for metric, val in metrics:
+                all_metrics[metric] += float(val)
+                print(val, end=" ")
+            print()
 
     for name in METRIC_NAMES:
         if args.multicat:
             for cat in cats:
                 if cat_sz[cat] > 0:
-                    all_metrics[cat + '.' + name] /= cat_sz[cat]
+                    all_metrics[cat + "." + name] /= cat_sz[cat]
         all_metrics[name] /= len(all_objs)
         print(name, all_metrics[name])
 
@@ -312,26 +319,27 @@ def run_reduce():
     if args.multicat:
         for cat in cats:
             if cat_sz[cat] > 0:
-                cat_txt = '{:12s}'.format(cat_description[cat])
+                cat_txt = "{:12s}".format(cat_description[cat])
                 for name in METRIC_NAMES:
-                    cat_txt += ' {}: {:.6f}'.format(name, all_metrics[cat + '.' + name])
-                cat_txt += ' n_inst: {}'.format(cat_sz[cat])
+                    cat_txt += " {}: {:.6f}".format(name, all_metrics[cat + "." + name])
+                cat_txt += " n_inst: {}".format(cat_sz[cat])
                 metrics_txt.append(cat_txt)
 
-        total_txt = '---\n{:12s}'.format('total')
+        total_txt = "---\n{:12s}".format("total")
     else:
-        total_txt = ''
+        total_txt = ""
     for name in METRIC_NAMES:
-        total_txt += ' {}: {:.6f}'.format(name, all_metrics[name])
+        total_txt += " {}: {:.6f}".format(name, all_metrics[name])
     metrics_txt.append(total_txt)
 
-    metrics_txt = '\n'.join(metrics_txt)
-    with open(out_metrics_path, 'w') as f:
+    metrics_txt = "\n".join(metrics_txt)
+    with open(out_metrics_path, "w") as f:
         f.write(metrics_txt)
-    print('WROTE', out_metrics_path)
+    print("WROTE", out_metrics_path)
     print(metrics_txt)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     if not args.reduce_only:
         print(">>> Compute")
         run_map()

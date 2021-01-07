@@ -1,12 +1,14 @@
 """
 Full evaluation script, including PSNR+SSIM evaluation with multi-GPU support.
 
-python eval.py --gpu_id=<gpu> -n <expname> -c <conf> -D /home/group/data/chairs -F srn
-Parallized, add --extra_gpus='space separated list of additional gpu ids' to use more GPUs
+python eval.py --gpu_id=<gpu list> -n <expname> -c <conf> -D /home/group/data/chairs -F srn
 """
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+)
 
 import torch
 import numpy as np
@@ -14,8 +16,8 @@ import imageio
 import skimage.measure
 import util
 from data import get_split_dataset
-from render import NeRFRenderer
 from model import make_model
+from render import NeRFRenderer
 import cv2
 import tqdm
 import ipdb
@@ -43,8 +45,11 @@ def extra_args(parser):
         "--eval_view_list", type=str, default=None, help="Path to eval view list"
     )
     parser.add_argument("--coarse", action="store_true", help="Coarse network as fine")
-    parser.add_argument("--no_compare_gt", action="store_true",
-            help="Skip GT comparison (metric won't be computed) and only render images")
+    parser.add_argument(
+        "--no_compare_gt",
+        action="store_true",
+        help="Skip GT comparison (metric won't be computed) and only render images",
+    )
     parser.add_argument(
         "--multicat",
         action="store_true",
@@ -71,14 +76,7 @@ def extra_args(parser):
     parser.add_argument(
         "--scale", type=float, default=1.0, help="Video scale relative to input size"
     )
-    parser.add_argument(
-        "--black",
-        action="store_true",
-        help="Force renderer to use a black background.",
-    )
-    parser.add_argument(
-        "--write_depth", action="store_true", help="Write depth image"
-    )
+    parser.add_argument("--write_depth", action="store_true", help="Write depth image")
     parser.add_argument(
         "--write_compare", action="store_true", help="Write GT comparison image"
     )
@@ -91,18 +89,15 @@ def extra_args(parser):
 
 
 args, conf = util.args.parse_args(
-    extra_args,
-    default_conf="conf/resnet_fine_mv.conf",
-    default_expname="shapenet",
+    extra_args, default_conf="conf/resnet_fine_mv.conf", default_expname="shapenet",
 )
 args.resume = True
 
-device = util.get_cuda(args.gpu_id)
+device = util.get_cuda(args.gpu_id[0])
 
-extra_gpus = list(map(int, args.extra_gpus.split()))
-
-dset = get_split_dataset(args.dataset_format, args.datadir,
-        want_split=args.split, training=False)
+dset = get_split_dataset(
+    args.dataset_format, args.datadir, want_split=args.split, training=False
+)
 data_loader = torch.utils.data.DataLoader(
     dset, batch_size=1, shuffle=False, num_workers=8, pin_memory=False
 )
@@ -137,42 +132,22 @@ if has_output:
     print("Writing images to", output_dir)
 
 
-class RenderWrapper(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.net = make_model(conf["model"]).to(device=device)
-        self.net.load_weights(args)
-        self.renderer = NeRFRenderer.from_conf(conf["renderer"], white_bkgd=not args.black,
-                eval_batch_size=args.ray_batch_size).to(device=device)
-
-    def forward(self, x):
-        if x.shape[0] == 0:
-            return (torch.zeros(0, 3, device=x.device),
-                    torch.zeros(0, device=x.device))
-            
-        outputs = self.renderer(self.net, x)
-        if self.renderer.using_fine:
-            rgb = outputs.fine.rgb
-            depth = outputs.fine.depth
-        else:
-            rgb = outputs.coarse.rgb
-            depth = outputs.coarse.depth
-        return rgb, depth
-
-
-renderer = RenderWrapper()
-renderer.eval()
-
+net = make_model(conf["model"]).to(device=device).load_weights(args)
+renderer = NeRFRenderer.from_conf(
+    conf["renderer"], lindisp=dset.lindisp, eval_batch_size=args.ray_batch_size
+).to(device=device)
 if args.coarse:
-    renderer.net.mlp_fine = None
+    net.mlp_fine = None
 
-if renderer.renderer.n_coarse < 64:
+if renderer.n_coarse < 64:
     # Ensure decent sampling resolution
-    renderer.renderer.n_coarse = 64
+    renderer.n_coarse = 64
 if args.coarse:
-    renderer.renderer.n_coarse = 64
-    renderer.renderer.n_fine = 128
-    renderer.renderer.using_fine = True
+    renderer.n_coarse = 64
+    renderer.n_fine = 128
+    renderer.using_fine = True
+
+render_par = renderer.bind_parallel(net, args.gpu_id, simple_output=True).eval()
 
 z_near = dset.z_near
 z_far = dset.z_far
@@ -206,10 +181,6 @@ rays_spl = []
 src_view_mask = None
 total_objs = len(data_loader)
 
-if len(extra_gpus):
-    print("Using extra GPUs", extra_gpus)
-    renderer = torch.nn.DataParallel(renderer, [args.gpu_id] + extra_gpus)
-
 with torch.no_grad():
     for obj_idx, data in enumerate(data_loader):
         print(
@@ -237,8 +208,11 @@ with torch.no_grad():
             Ht = int(H * args.scale)
             Wt = int(W * args.scale)
             if abs(Ht / args.scale - H) > 1e-10 or abs(Wt / args.scale - W) > 1e-10:
-                warnings.warn("Inexact scaling, please check {} times ({}, {}) is integral".format(
-                    args.scale, H, W))
+                warnings.warn(
+                    "Inexact scaling, please check {} times ({}, {}) is integral".format(
+                        args.scale, H, W
+                    )
+                )
             H, W = Ht, Wt
 
         if all_rays is None or use_source_lut or args.free_pose:
@@ -271,8 +245,15 @@ with torch.no_grad():
             poses = poses[target_view_mask]  # (NV[-NS], 4, 4)
 
             all_rays = (
-                util.gen_rays(poses.reshape(-1, 4, 4), W, H, focal * args.scale,
-                    z_near, z_far, c=c * args.scale if c is not None else None)
+                util.gen_rays(
+                    poses.reshape(-1, 4, 4),
+                    W,
+                    H,
+                    focal * args.scale,
+                    z_near,
+                    z_far,
+                    c=c * args.scale if c is not None else None,
+                )
                 .reshape(-1, 8)
                 .to(device=device)
             )  # ((NV[-NS])*H*W, 8)
@@ -280,24 +261,22 @@ with torch.no_grad():
             poses = None
             focal = focal.to(device=device)
 
-        rays_spl = torch.split(
-            all_rays, args.ray_batch_size, dim=0
-        )  # Creates views
+        rays_spl = torch.split(all_rays, args.ray_batch_size, dim=0)  # Creates views
 
         n_gen_views = len(novel_view_idxs)
 
-        util.get_module(renderer).net.encode(
+        net.encode(
             images[src_view_mask].to(device=device).unsqueeze(0),
             src_poses.unsqueeze(0),
             focal,
-            c=c
+            c=c,
         )
 
         all_rgb, all_depth = [], []
         for rays in tqdm.tqdm(rays_spl):
-            rgb, depth = renderer(rays)
-            rgb = rgb.cpu()
-            depth = depth.cpu()
+            rgb, depth = render_par(rays[None])
+            rgb = rgb[0].cpu()
+            depth = depth[0].cpu()
             all_rgb.append(rgb)
             all_depth.append(depth)
 
@@ -323,7 +302,8 @@ with torch.no_grad():
                         obj_out_dir, "{:06}_depth.exr".format(novel_view_idxs[i].item())
                     )
                     out_depth_norm_file = os.path.join(
-                        obj_out_dir, "{:06}_depth_norm.png".format(novel_view_idxs[i].item())
+                        obj_out_dir,
+                        "{:06}_depth_norm.png".format(novel_view_idxs[i].item()),
                     )
                     depth_cmap_norm = util.cmap(all_depth[i])
                     cv2.imwrite(out_depth_file, all_depth[i])
@@ -339,7 +319,10 @@ with torch.no_grad():
             )  # (NV-NS, H, W, 3)
             for view_idx in range(n_gen_views):
                 ssim = skimage.measure.compare_ssim(
-                    all_rgb[view_idx], rgb_gt_all[view_idx], multichannel=True, data_range=1
+                    all_rgb[view_idx],
+                    rgb_gt_all[view_idx],
+                    multichannel=True,
+                    data_range=1,
                 )
                 psnr = skimage.measure.compare_psnr(
                     all_rgb[view_idx], rgb_gt_all[view_idx], data_range=1
@@ -348,8 +331,10 @@ with torch.no_grad():
                 curr_psnr += psnr
 
                 if args.write_compare:
-                    out_file = os.path.join(obj_out_dir, '{:06}_compare.png'.format(
-                        novel_view_idxs[view_idx].item()))
+                    out_file = os.path.join(
+                        obj_out_dir,
+                        "{:06}_compare.png".format(novel_view_idxs[view_idx].item()),
+                    )
                     out_im = np.hstack((all_rgb[view_idx], rgb_gt_all[view_idx]))
                     imageio.imwrite(out_file, (out_im * 255).astype(np.uint8))
         curr_psnr /= n_gen_views

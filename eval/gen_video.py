@@ -1,6 +1,9 @@
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+)
 
 import torch
 import torch.nn.functional as F
@@ -54,26 +57,21 @@ def extra_args(parser):
         help="Distance of camera from origin, default is average of z_far, z_near of dataset (only for non-DTU)",
     )
     parser.add_argument("--fps", type=int, default=30, help="FPS of video")
-    parser.add_argument(
-        "--black",
-        action="store_true",
-        help="Force renderer to use a black background. Use this for DTU only.",
-    )
     return parser
 
 
 args, conf = util.args.parse_args(extra_args)
 args.resume = True
 
-device = util.get_cuda(args.gpu_id)
-extra_gpus = list(map(int, args.extra_gpus.split()))
+device = util.get_cuda(args.gpu_id[0])
 
-dset = get_split_dataset(args.dataset_format, args.datadir,
-        want_split=args.split, training=False)
+dset = get_split_dataset(
+    args.dataset_format, args.datadir, want_split=args.split, training=False
+)
 
 data = dset[args.subset]
 data_path = data["path"]
-print(data_path)
+print("Data instance loaded:", data_path)
 
 images = data["images"]  # (NV, 3, H, W)
 
@@ -104,15 +102,12 @@ if args.scale != 1.0:
 
 net = make_model(conf["model"]).to(device=device)
 net.load_weights(args)
-if len(extra_gpus):
-    warnings.warn("Multi GPU not implemented")
 
 renderer = NeRFRenderer.from_conf(
-    conf["renderer"],
-    white_bkgd=not args.black,
-    lindisp=dset.lindisp,
-    eval_batch_size=args.ray_batch_size,
+    conf["renderer"], lindisp=dset.lindisp, eval_batch_size=args.ray_batch_size,
 ).to(device=device)
+
+render_par = renderer.bind_parallel(net, args.gpu_id, simple_output=True).eval()
 
 # Get the distance from camera to origin
 z_near = dset.z_near
@@ -194,8 +189,6 @@ NS = len(source)
 random_source = NS == 1 and source[0] == -1
 assert not (source >= NV).any()
 
-net.eval()
-renderer.eval()
 if renderer.n_coarse < 64:
     # Ensure decent sampling resolution
     renderer.n_coarse = 64
@@ -220,11 +213,9 @@ with torch.no_grad():
     for rays in tqdm.tqdm(
         torch.split(render_rays.view(-1, 8), args.ray_batch_size, dim=0)
     ):
-        outputs = renderer(net, rays)
-        if renderer.using_fine:
-            all_rgb_fine.append(outputs.fine.rgb)
-        else:
-            all_rgb_fine.append(outputs.coarse.rgb)
+        rgb, _depth = render_par(rays[None])
+        all_rgb_fine.append(rgb[0])
+    _depth = None
     rgb_fine = torch.cat(all_rgb_fine)
     # rgb_fine (V*H*W, 3)
 

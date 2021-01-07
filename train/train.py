@@ -4,7 +4,9 @@
 import sys
 import os
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+)
 
 import warnings
 import trainlib
@@ -15,10 +17,13 @@ import util
 import numpy as np
 import torch.nn.functional as F
 import torch
+from dotmap import DotMap
 
 
 def extra_args(parser):
-    parser.add_argument("--batch_size", "-B", type=int, default=4, help="Object batch size ('SB')")
+    parser.add_argument(
+        "--batch_size", "-B", type=int, default=4, help="Object batch size ('SB')"
+    )
     parser.add_argument(
         "--nviews",
         "-V",
@@ -26,24 +31,30 @@ def extra_args(parser):
         default="1",
         help="Number of source views (multiview); put multiple (space delim) to pick randomly per batch ('NV')",
     )
-    parser.add_argument("--freeze_enc", action="store_true", default=None,
-            help="Freeze encoder weights and only train MLP")
     parser.add_argument(
-        "--black",
+        "--freeze_enc",
         action="store_true",
-        help="Force renderer to use a black background.",
+        default=None,
+        help="Freeze encoder weights and only train MLP",
     )
 
-    parser.add_argument("--no_bbox_step", type=int, default=10000, help="Step to stop using bbox sampling")
-    parser.add_argument("--fixed_test", action="store_true", default=None,
-            help="Freeze encoder weights and only train MLP")
+    parser.add_argument(
+        "--no_bbox_step",
+        type=int,
+        default=100000,
+        help="Step to stop using bbox sampling",
+    )
+    parser.add_argument(
+        "--fixed_test",
+        action="store_true",
+        default=None,
+        help="Freeze encoder weights and only train MLP",
+    )
     return parser
 
 
-args, conf = util.args.parse_args(extra_args,
-        default_ray_batch_size=128)
-device = util.get_cuda(args.gpu_id)
-assert len(args.extra_gpus) == 0  # Multi-gpu not supported
+args, conf = util.args.parse_args(extra_args, training=True, default_ray_batch_size=128)
+device = util.get_cuda(args.gpu_id[0])
 
 dset, val_dset, _ = get_split_dataset(args.dataset_format, args.datadir)
 print(
@@ -56,18 +67,19 @@ if args.freeze_enc:
     print("Encoder frozen")
     net.encoder.eval()
 
+renderer = NeRFRenderer.from_conf(conf["renderer"], lindisp=dset.lindisp,).to(
+    device=device
+)
+
+# Parallize
+render_par = renderer.bind_parallel(net, args.gpu_id).eval()
+
 nviews = list(map(int, args.nviews.split()))
 
 
 class PixelNeRFTrainer(trainlib.Trainer):
     def __init__(self):
-        super().__init__(net, dset, val_dset, args, conf["train"],
-                device=device)
-        self.renderer = NeRFRenderer.from_conf(
-            conf["renderer"],
-            white_bkgd=not args.black,
-            lindisp=dset.lindisp,
-        ).to(device=device)
+        super().__init__(net, dset, val_dset, args, conf["train"], device=device)
         self.renderer_state_path = "%s/%s/_renderer" % (
             self.args.checkpoints_path,
             self.args.name,
@@ -75,7 +87,9 @@ class PixelNeRFTrainer(trainlib.Trainer):
 
         self.lambda_coarse = conf.get_float("loss.lambda_coarse")
         self.lambda_fine = conf.get_float("loss.lambda_fine", 1.0)
-        print("lambda coarse {} and fine {}".format(self.lambda_coarse, self.lambda_fine))
+        print(
+            "lambda coarse {} and fine {}".format(self.lambda_coarse, self.lambda_fine)
+        )
         self.rgb_coarse_crit = loss.get_rgb_loss(conf["loss.rgb"], True)
         fine_loss_conf = conf["loss.rgb"]
         if "rgb_fine" in conf["loss"]:
@@ -85,8 +99,9 @@ class PixelNeRFTrainer(trainlib.Trainer):
 
         if args.resume:
             if os.path.exists(self.renderer_state_path):
-                self.renderer.load_state_dict(torch.load(self.renderer_state_path,
-                    map_location=device))
+                renderer.load_state_dict(
+                    torch.load(self.renderer_state_path, map_location=device)
+                )
 
         self.z_near = dset.z_near
         self.z_far = dset.z_far
@@ -94,10 +109,10 @@ class PixelNeRFTrainer(trainlib.Trainer):
         self.use_bbox = args.no_bbox_step > 0
 
     def post_batch(self, epoch, batch):
-        self.renderer.sched_step(args.batch_size)
+        renderer.sched_step(args.batch_size)
 
     def extra_save_state(self):
-        torch.save(self.renderer.state_dict(), self.renderer_state_path)
+        torch.save(renderer.state_dict(), self.renderer_state_path)
 
     def calc_losses(self, data, is_train=True, global_step=0):
         if "images" not in data:
@@ -110,7 +125,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
         all_focals = data["focal"]  # (SB)
         all_c = data.get("c")  # (SB)
 
-        if self.use_bbox and global_step > args.no_bbox_step:
+        if self.use_bbox and global_step >= args.no_bbox_step:
             self.use_bbox = False
             print(">>> Stopped using bbox sampling @ iter", global_step)
 
@@ -137,7 +152,8 @@ class PixelNeRFTrainer(trainlib.Trainer):
             if curr_nviews > 1:
                 # Somewhat inefficient, don't know better way
                 image_ord[obj_idx] = torch.from_numpy(
-                        np.random.choice(NV, curr_nviews, replace=False))
+                    np.random.choice(NV, curr_nviews, replace=False)
+                )
             images_0to1 = images * 0.5 + 0.5
 
             cam_rays = util.gen_rays(
@@ -180,11 +196,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
             c=all_c.to(device=device) if all_c is not None else None,
         )
 
-        render_dict = self.renderer(
-            net,
-            all_rays,
-            want_weights=True,
-        )
+        render_dict = DotMap(render_par(all_rays, want_weights=True,))
         coarse = render_dict.coarse
         fine = render_dict.fine
         using_fine = len(fine) > 0
@@ -209,9 +221,9 @@ class PixelNeRFTrainer(trainlib.Trainer):
         return self.calc_losses(data, is_train=True, global_step=global_step)
 
     def eval_step(self, data, global_step):
-        self.renderer.eval()
+        renderer.eval()
         losses = self.calc_losses(data, is_train=False, global_step=global_step)
-        self.renderer.train()
+        renderer.train()
         return losses
 
     def vis_step(self, data, global_step, idx=None):
@@ -242,7 +254,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
         views_src = torch.from_numpy(views_src)
 
         # set renderer net to eval mode
-        self.renderer.eval()
+        renderer.eval()
         source_views = (
             images_0to1[views_src]
             .permute(0, 2, 3, 1)
@@ -261,23 +273,21 @@ class PixelNeRFTrainer(trainlib.Trainer):
                 focal.to(device=device),
                 c=c.to(device=device) if c is not None else None,
             )
-            test_rays = test_rays.reshape(H * W, -1)
-            render_dict = self.renderer(
-                net, test_rays, want_weights=True
-            )
+            test_rays = test_rays.reshape(1, H * W, -1)
+            render_dict = DotMap(render_par(test_rays, want_weights=True))
             coarse = render_dict.coarse
             fine = render_dict.fine
 
             using_fine = len(fine) > 0
 
-            alpha_coarse_np = coarse.weights.sum(dim=-1).cpu().numpy().reshape(H, W)
-            rgb_coarse_np = coarse.rgb.cpu().numpy().reshape(H, W, 3)
-            depth_coarse_np = coarse.depth.cpu().numpy().reshape(H, W)
+            alpha_coarse_np = coarse.weights[0].sum(dim=-1).cpu().numpy().reshape(H, W)
+            rgb_coarse_np = coarse.rgb[0].cpu().numpy().reshape(H, W, 3)
+            depth_coarse_np = coarse.depth[0].cpu().numpy().reshape(H, W)
 
             if using_fine:
-                alpha_fine_np = fine.weights.sum(dim=1).cpu().numpy().reshape(H, W)
-                depth_fine_np = fine.depth.cpu().numpy().reshape(H, W)
-                rgb_fine_np = fine.rgb.cpu().numpy().reshape(H, W, 3)
+                alpha_fine_np = fine.weights[0].sum(dim=1).cpu().numpy().reshape(H, W)
+                depth_fine_np = fine.depth[0].cpu().numpy().reshape(H, W)
+                rgb_fine_np = fine.rgb[0].cpu().numpy().reshape(H, W, 3)
 
         print("c rgb min {} max {}".format(rgb_coarse_np.min(), rgb_coarse_np.max()))
         print(
@@ -326,7 +336,7 @@ class PixelNeRFTrainer(trainlib.Trainer):
         print("psnr", psnr)
 
         # set the renderer network back to train mode
-        self.renderer.train()
+        renderer.train()
         return vis, vals
 
 

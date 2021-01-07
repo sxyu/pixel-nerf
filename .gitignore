@@ -1,7 +1,6 @@
 # Editors
 .vscode/
 .idea/
-*.swp
 
 # Vagrant
 .vagrant/
@@ -17,6 +16,7 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 *$py.class
+*.swp
 
 # Custom
 checkpoints/

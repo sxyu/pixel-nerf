@@ -70,10 +70,7 @@ def get_image_to_tensor_balanced(image_size=0):
     if image_size > 0:
         ops.append(transforms.Resize(image_size))
     ops.extend(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-        ]
+        [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),]
     )
     return transforms.Compose(ops)
 
@@ -281,13 +278,7 @@ def gen_rays(poses, width, height, focal, z_near, z_far, c=None, ndc=False):
 
 def trans_t(t):
     return torch.tensor(
-        [
-            [1, 0, 0, 0],
-            [0, 1, 0, 0],
-            [0, 0, 1, t],
-            [0, 0, 0, 1],
-        ],
-        dtype=torch.float32,
+        [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, t], [0, 0, 0, 1],], dtype=torch.float32,
     )
 
 
