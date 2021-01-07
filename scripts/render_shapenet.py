@@ -602,6 +602,7 @@ def parse_args():
     else:
         argv = []
 
+    # Object IDs taken from the ShapeNet category JSON
     OBJ_IDS = dict(
         table="04379243",
         chair="03001627",
@@ -611,7 +612,7 @@ def parse_args():
         bowl="02880940",
     )
     parser = argparse.ArgumentParser()
-    parser.add_argument("--use_pbr", action="store_true")
+    parser.add_argument("--use_pbr", action="store_true", help="Whether to render with physically based rendering (Blender Cycles) or not.")
     parser.add_argument(
         "--out_dir", required=True, help="Where to write the rendered images"
     )
@@ -711,10 +712,8 @@ def parse_args():
         type=int,
         help="number of views to be rendered",
     )
-    parser.add_argument("--model_dirs", nargs="*")
-    parser.add_argument("--pool", action="store_true", default=False)
-    parser.add_argument("--overwrite", action="store_true", default=False)
-    parser.add_argument("--single", action="store_true")
+    parser.add_argument("--overwrite", action="store_true", default=False, help="Overwrite existing renders")
+    parser.add_argument("--pool", action="store_true", default=False, help="Render in parallel. Improves performance.")
     args = parser.parse_args(argv)
 
     obj_id = OBJ_IDS[args.object]
