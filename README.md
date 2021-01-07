@@ -36,7 +36,7 @@ https://s3.eu-central-1.amazonaws.com/avg-projects/differentiable_volumetric_ren
 
 - The remaining datasets may be found in
 https://drive.google.com/drive/folders/1PsT3uKwqHHD2bEEHkIXB99AlIjtmrEiR?usp=sharing
-    - Custom two-chair `multi_chair_*.zip`
+    - Custom two-chair `multi_chair_{train/val/test}.zip`. Download splits into a parent directory and pass the parent directory path to training command.
     - DTU (4x downsampled, rescaled) in DVR's DTU format `dtu_dataset.zip`
     - SRN chair/car (128x128) `srn_*.zip` needed for single-category exps.
       Note the car set is a re-rendered version provided by Vincent Sitzmann
@@ -149,7 +149,7 @@ Please refer the the following table for a list of provided experiments with ass
 | SRN chairs                 | srn_chair     | conf/exp/srn.conf                  | srn_chairs.zip                          | path/chairs       |
 | SRN cars                   | srn_car       | conf/exp/srn.conf                  | srn_cars.zip                            | path/cars         |
 | DTU                        | dtu           | conf/exp/dtu.conf                  | dtu_dataset.zip                         | path/rs_dtu_4     |
-| Two chairs                 | TBA           | TBA                                | multi_chair_*.zip                       | path              |
+| Two chairs                 | mult_obj      | conf/exp/mult_obj.conf             | multi_chair_{train/val/test}.zip        | path              |
 
 
 # Quantitative evaluation instructions
@@ -243,6 +243,7 @@ Training code is in `train/` directory, specifically `train/train.py`.
 
 - Example for training to DTU: `python train/train.py -n dtu_exp -c conf/exp/dtu.conf -D <data dir>/rs_dtu_4 -V 3 --gpu_id=<GPU> --resume`
 - Example for training to SRN cars, 1 view: `python train/train.py -n srn_car_exp -c conf/exp/srn.conf -D <srn data dir>/cars --gpu_id=<GPU> --resume`
+- Example for training to ShapeNet multi-object, 2 view: `python train/train.py -n multi_obj -c conf/exp/multi_obj.conf -D <parent dir of splits> --gpu_id=<GPU> --resume`
 
 Additional flags
 - `--resume` to resume from checkpoint, if available. Usually just pass this to be safe.
