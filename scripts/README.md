@@ -1,3 +1,7 @@
+# Rendering multiple object ShapeNet scenes
+The `render_shapenet.py` script is used to render ShapeNet scenes composed of multiple object instances, given an object class.
+This script will render different splits (train/test/val) of the ShapeNet models; see [Render Flags](#render-flags) for more information.
+
 ## Installing Blender
 
 1. Download and untar Blender
@@ -22,7 +26,25 @@ This allows you to call
 bpy render_shapenet.py -- [ARGS]
 ```
 
-## Render Arguments
+## Render Flags
+- `--out_dir` (required) -- Parent directory to write rendered images. Instances will be rendered by ID in child subdirectories.
+- `--src_model_dir` (required) -- Location of the ShapeNet model directory with all object classes and instances.
+- `--object` (default: chair) -- Name of object class to render.
+- `--val_frac` (default: 0.2) -- When generating a split of object instances, what fraction of all instances to use as validation. The resulting split is written in the object class directory as `val_split_{n_val}.txt`.
+- `--test_frac` (default: 0.2) -- When generating a split of object instances, what fraction of all instances to use as test. The resulting split is written in the object class directory as `test_split_{n_test}.txt`.
+- `--split` (choice of `[train, val, test]`) -- Which split to render. `val/test` splits use a specific camera trajectory (Archimedes spiral, from SRN).
+- `--n_views` (default: 20) -- Number of views to render per instance.
+- `--res` (default: 128) -- Output resolution of images (default 128x128).
+- `--start_idx` (default: 0) -- If rendering a subset of the object instances, provide the starting index.
+- `--n_objects` (default: 2) -- The number of objects to include per scene.
+- `--end_idx` (default: -1) -- If rendering a subset of the object instances, provide the ending index.
+- `--use_pbr` -- Whether to use Cycles to render with physically based rendering. Slower, but more photorealistic.
+- `--light_env` -- If `--use_pbr`, you can use an HDRI light map. Pass the path of the HDRI here.
+- `--light_strength` -- The strength of the light map in the scene, if using an HDRI light map.
+- `--render_alpha` -- Render the object masks.
+- `--render_depth` -- Render the scene depth map.
+- `--render_bg` -- Render the scene background (only useful if using PBR + HDRI light maps).
+- `--pool` -- Render in parallel. Faster.
 
 
 ## Rendering with Blender EEVEE

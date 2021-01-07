@@ -612,7 +612,6 @@ def parse_args():
         bowl="02880940",
     )
     parser = argparse.ArgumentParser()
-    parser.add_argument("--use_pbr", action="store_true", help="Whether to render with physically based rendering (Blender Cycles) or not.")
     parser.add_argument(
         "--out_dir", required=True, help="Where to write the rendered images"
     )
@@ -652,6 +651,26 @@ def parse_args():
         help="Which split to render",
     )
     parser.add_argument(
+        "--n_views", type=int, default=20, help="Number of views to render per instance"
+    )
+    parser.add_argument(
+        "--start_idx",
+        type=int,
+        default=0,
+        help="If rendering a subset of the instances, starting instance to render.",
+    )
+    parser.add_argument(
+        "--end_idx",
+        type=int,
+        default=-1,
+        help="If rendering a subset of the instances, ending instance to render.",
+    )
+    parser.add_argument(
+        "--n_objects", type=int, default=1, help="number of objects in scene"
+    )
+
+    parser.add_argument("--use_pbr", action="store_true", help="Whether to render with physically based rendering (Blender Cycles) or not.")
+    parser.add_argument(
         "--light_env",
         default=None,
         help="If using PBR rendering and an HDRI light map, the path to the HDRI",
@@ -663,9 +682,6 @@ def parse_args():
         help="If using HDRI light map, HDRI strength",
     )
     parser.add_argument(
-        "--n_views", type=int, default=20, help="Number of views to render per instance"
-    )
-    parser.add_argument(
         "--render_alpha", action="store_true", help="select to render the object masks"
     )
     parser.add_argument(
@@ -674,31 +690,16 @@ def parse_args():
     parser.add_argument(
         "--render_bg",
         action="store_true",
-        help="select to not render the background layer",
+        help="select to render the background layer",
     )
     parser.add_argument(
-        "--start_idx",
-        type=int,
-        default=0,
-        help="starting object to render.",
+        "--res", type=int, default=128, help="Output resolution of images (res x res), default 128"
     )
     parser.add_argument(
-        "--end_idx",
-        type=int,
-        default=-1,
-        help="ending object to render.",
+        "--n_samples", type=int, default=128, help="Number of anti-aliasing samples, default 128"
     )
     parser.add_argument(
-        "--res", type=int, default=128, help="number of views to be rendered"
-    )
-    parser.add_argument(
-        "--n_samples", type=int, default=128, help="number of views to be rendered"
-    )
-    parser.add_argument(
-        "--color_depth", type=int, default=16, help="number of views to be rendered"
-    )
-    parser.add_argument(
-        "--n_objects", type=int, default=1, help="number of objects in scene"
+        "--color_depth", type=int, default=16, help="Color depth of images (default 16)"
     )
     parser.add_argument(
         "--use_gpu",
