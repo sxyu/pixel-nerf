@@ -23,7 +23,11 @@ alias bpy="blender --background -noaudio --python”
 ```
 This allows you to call
 ```
-bpy render_shapenet.py -- [ARGS]
+bpy render_shapenet.py -- <flags>
+```
+Unless debugging, recommended to redirect Blender's stdout to /dev/null and direct stderr to stdout to keep script logging.
+```
+bpy render_shapenet.py -- <flags> 2>&1 >/dev/null
 ```
 
 ## Render Flags
