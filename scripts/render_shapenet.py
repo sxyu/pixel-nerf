@@ -272,7 +272,8 @@ def global_setup(args):
 
     if args.use_pbr:
         set_cycles(args)
-        add_light_env(args.light_env, args.light_strength)
+        if args.light_env is not None:
+            add_light_env(args.light_env, args.light_strength)
         _add_background_layer()
     else:
         set_eevee(args)
@@ -355,10 +356,6 @@ def _render_single(filepath, camera, args):
     file_prefixes = [
         _update_node_filepath(filepath, scene, "Object File Output", "obj"),
     ]
-    if args.render_ground:
-        file_prefixes.append(
-            _update_node_filepath(filepath, scene, "Ground File Output", "ground")
-        )
     if args.render_bg:
         file_prefixes.append(
             _update_node_filepath(filepath, scene, "Env File Output", "env")

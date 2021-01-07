@@ -40,7 +40,7 @@ bpy render_shapenet.py -- [ARGS]
 - `--end_idx` (default: -1) -- If rendering a subset of the object instances, provide the ending index.
 - `--use_pbr` -- Whether to use Cycles to render with physically based rendering. Slower, but more photorealistic.
 - `--light_env` -- If `--use_pbr`, you can use an HDRI light map. Pass the path of the HDRI here.
-- `--light_strength` -- The strength of the light map in the scene, if using an HDRI light map.
+- `--light_strength` -- The strength of the light map in the scene, if using an HDRI light map. You can easily get HDRIs from websites like https://hdrihaven.com/.
 - `--render_alpha` -- Render the object masks.
 - `--render_depth` -- Render the scene depth map.
 - `--render_bg` -- Render the scene background (only useful if using PBR + HDRI light maps).
@@ -74,18 +74,20 @@ First configure your X server to be compatible with your graphics card.
 ```
 sudo nvidia-xconfig -a --use-display-device=None --virtual=1280x1024
 ```
-Start your X server, labeled with <server number>
+You can also further edit this configuration at `/etc/X11/xorg.conf`.
+Now start your X server, labeled with an arbitrary server number, in this case 7
 ```
-sudo nohup Xorg :<server number> &
+sudo nohup Xorg :7 &
 ```
-Run an auxiliary remote VNC server to create a virtual display. Label it with a separate <remote server number>.
+Run an auxiliary remote VNC server to create a virtual display. Label it with a separate remote server number, in this case 8.
 ```
-/opt/TurboVNC/bin/vncserver :<remote server number>
+/opt/TurboVNC/bin/vncserver :8
 ```
-To test, run `glxinfo` on Xserver <server number>, device <device number> (GPU 0 on your machine).
+To test, run `glxinfo` on Xserver 7, device 0 (GPU 0 on your machine).
 ```
-DISPLAY=:8 vglrun -d :<server number>.<device number> glxinfo
+DISPLAY=:8 vglrun -d :7.0 glxinfo
 ```
-If all is well, headless rendering with Eevee should now work.
-
-
+If all is well, proceed to run headless rendering with Eevee with
+```
+DISPLAY=:8 vglrun -d :7.0 blender --background -noaudio --python render_shapenet.py -- <flags>
+```
