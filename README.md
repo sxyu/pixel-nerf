@@ -37,6 +37,7 @@ https://s3.eu-central-1.amazonaws.com/avg-projects/differentiable_volumetric_ren
 - The remaining datasets may be found in
 https://drive.google.com/drive/folders/1PsT3uKwqHHD2bEEHkIXB99AlIjtmrEiR?usp=sharing
     - Custom two-chair `multi_chair_{train/val/test}.zip`. Download splits into a parent directory and pass the parent directory path to training command.
+        - To render out your own dataset, feel free to use our script in `scripts/render_shapenet.py`. See `scripts/README.md` for installation instructions.
     - DTU (4x downsampled, rescaled) in DVR's DTU format `dtu_dataset.zip`
     - SRN chair/car (128x128) `srn_*.zip` needed for single-category exps.
       Note the car set is a re-rendered version provided by Vincent Sitzmann
