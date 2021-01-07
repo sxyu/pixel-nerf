@@ -70,13 +70,6 @@ def parse_args(
         "--datadir", "-D", type=str, default=None, help="Dataset directory"
     )
     parser.add_argument(
-        "--ray_batch_size",
-        "-R",
-        type=int,
-        default=default_ray_batch_size,
-        help="Ray batch size",
-    )
-    parser.add_argument(
         "--ray_batch_size", "-R", type=int, default=default_ray_batch_size, help="Ray batch size"
     )
     if callback is not None:
