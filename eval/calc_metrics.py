@@ -300,10 +300,11 @@ def run_reduce():
             for metric, val in metrics:
                 all_metrics[cat_name + "." + metric] += float(val)
 
+        for metric, val in metrics:
+            all_metrics[metric] += float(val)
         if should_print_all_objs:
             print(obj_root, end=" ")
             for metric, val in metrics:
-                all_metrics[metric] += float(val)
                 print(val, end=" ")
             print()
 
