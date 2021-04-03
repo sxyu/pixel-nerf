@@ -351,7 +351,7 @@ with torch.no_grad():
                 curr_ssim,
                 "running psnr",
                 total_psnr / cnt,
-                "ssim",
+                "running ssim",
                 total_ssim / cnt,
             )
         finish_file.write(
