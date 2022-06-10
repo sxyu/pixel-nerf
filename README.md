@@ -268,7 +268,7 @@ They are of the form
 # BibTeX
 
 ```
-@inproceedings{yu2020pixelnerf,
+@inproceedings{yu2021pixelnerf,
       title={{pixelNeRF}: Neural Radiance Fields from One or Few Images},
       author={Alex Yu and Vickie Ye and Matthew Tancik and Angjoo Kanazawa},
       year={2021},
