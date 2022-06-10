@@ -268,13 +268,11 @@ They are of the form
 # BibTeX
 
 ```
-@misc{yu2020pixelnerf,
-      title={pixelNeRF: Neural Radiance Fields from One or Few Images},
+@inproceedings{yu2020pixelnerf,
+      title={{pixelNeRF}: Neural Radiance Fields from One or Few Images},
       author={Alex Yu and Vickie Ye and Matthew Tancik and Angjoo Kanazawa},
-      year={2020},
-      eprint={2012.02190},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV}
+      year={2021},
+      booktitle={CVPR},
 }
 ```
 
